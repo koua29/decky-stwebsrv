@@ -92,6 +92,26 @@ const L = FR
         "Steam n'a pas répondu. La console doit être en mode Jeu (pas en mode Bureau), avec Decky actif.",
       steamFailed: (detail) => `Steam n'a pas pu créer le raccourci${detail ? ` : ${detail}` : "."}`,
       nativeNote: "Programme Linux : il sera rendu exécutable si besoin.",
+      appidButton: "Créer steam_appid.txt dans ce dossier (ID Steam du jeu)",
+      appidLabel: "ID Steam du jeu, nom ou lien du Store :",
+      appidInSteam: "Créer aussi steam_appid.txt à côté du programme",
+      appidHint:
+        "Le jeu lit ce fichier dans son dossier de démarrage, en général celui de l'.exe. Steam doit être lancé et ton compte doit posséder le jeu.",
+      appidChecking: "Vérification sur le Steam Store…",
+      appidSearching: "Recherche sur le Steam Store…",
+      appidFound: (name, type) => `✓ ${name}${type && type !== "game" ? ` (${type})` : ""}`,
+      appidDlc: (name, id) => `C'est un DLC : le jeu attend l'ID du jeu de base. Utiliser ${name} (${id})`,
+      appidUnknown: "ID introuvable sur le Steam Store (jeu retiré ou absent de ta région ?).",
+      appidOffline: "Steam Store injoignable : l'ID ne peut pas être vérifié.",
+      appidOfflineSearch: "Steam Store injoignable : entre l'ID du jeu en chiffres.",
+      appidNoResult: "Aucun jeu trouvé : essaie un autre nom ou entre l'ID.",
+      appidCurrent: (id) => (id ? `Le fichier contient déjà : ${id}` : "Le fichier existe déjà, mais il est vide."),
+      appidInvalid: "Entre l'ID Steam du jeu (chiffres) ou choisis un jeu dans la liste.",
+      appidUnverified: (id) => `L'ID ${id} n'a pas été trouvé sur le Steam Store. Créer le fichier quand même ?`,
+      appidReplace: (old, id) =>
+        old ? `steam_appid.txt contient déjà ${old}. Le remplacer par ${id} ?` : `steam_appid.txt existe déjà. Le remplacer par ${id} ?`,
+      appidWriting: "Écriture de steam_appid.txt…",
+      appidWritten: (id, name) => `steam_appid.txt : ${id}${name ? ` (${name})` : ""}`,
     }
   : {
       logout: "Log Out",
@@ -169,6 +189,26 @@ const L = FR
       steamNoAnswer: "Steam did not answer. The console must be in Game Mode (not Desktop Mode), with Decky running.",
       steamFailed: (detail) => `Steam could not create the shortcut${detail ? `: ${detail}` : "."}`,
       nativeNote: "Linux program: it will be made executable if needed.",
+      appidButton: "Create steam_appid.txt in this folder (the game's Steam ID)",
+      appidLabel: "Steam App ID, game name or Store link:",
+      appidInSteam: "Also create steam_appid.txt next to the program",
+      appidHint:
+        "The game reads this file in the folder it starts from, usually the one holding its .exe. Steam must be running, and your account must own the game.",
+      appidChecking: "Checking on the Steam Store…",
+      appidSearching: "Searching the Steam Store…",
+      appidFound: (name, type) => `✓ ${name}${type && type !== "game" ? ` (${type})` : ""}`,
+      appidDlc: (name, id) => `This is a DLC: the game expects its base game ID. Use ${name} (${id})`,
+      appidUnknown: "ID not found on the Steam Store (removed game, or not sold in your region?).",
+      appidOffline: "Steam Store unreachable: the ID cannot be checked.",
+      appidOfflineSearch: "Steam Store unreachable: type the game's ID in digits.",
+      appidNoResult: "No game found: try another name or type the ID.",
+      appidCurrent: (id) => (id ? `The file already holds: ${id}` : "The file already exists, but it is empty."),
+      appidInvalid: "Type the game's Steam App ID (digits) or pick a game in the list.",
+      appidUnverified: (id) => `ID ${id} was not found on the Steam Store. Create the file anyway?`,
+      appidReplace: (old, id) =>
+        old ? `steam_appid.txt already holds ${old}. Replace it with ${id}?` : `steam_appid.txt already exists. Replace it with ${id}?`,
+      appidWriting: "Writing steam_appid.txt…",
+      appidWritten: (id, name) => `steam_appid.txt: ${id}${name ? ` (${name})` : ""}`,
     };
 
 function applyI18n(root = document) {
@@ -1188,6 +1228,9 @@ function openPreview(path) {
 
 function openFile(row) {
   const path = row.getAttribute("data-path");
+  if (path.substring(path.lastIndexOf("/") + 1).toLowerCase() === "steam_appid.txt") {
+    return openAppIdDialog(parentPath(path));
+  }
   const size = parseInt(row.getAttribute("data-size") || "0", 10);
   if (IMAGE.test(path) || VIDEO.test(path) || AUDIO.test(path)) return openPreview(path);
   if (BINARY.test(path)) return startDownload(downloadUrl(currentDrive, path, false));
@@ -1209,6 +1252,9 @@ function openSteamDialog(path) {
   $("#steam-name").value = fileName.replace(/\.[^.]+$/, "");
   $("#steam-proton").checked = kind === "windows";
   $("#steam-options").value = "";
+  $("#steam-appid").checked = false;
+  steamPicker.reset("");
+  steamPicker.root.classList.add("hidden");
   Dialog.show("steam");
   $("#steam-name").focus();
   $("#steam-name").select();
@@ -1229,6 +1275,12 @@ async function addToSteam(force = false) {
     options: $("#steam-options").value.trim(),
   };
   if (force) params.force = "1";
+  let appid = null;
+  if ($("#steam-appid").checked) {
+    appid = await steamPicker.choice();
+    // a second call (force) comes after the file was already written
+    if (!force && !(await writeAppId(parentPath(params.path), appid))) return;
+  }
   Dialog.loading.show(L.steamAdding);
   let result;
   try {
@@ -1240,7 +1292,7 @@ async function addToSteam(force = false) {
   Dialog.loading.hide();
   if (result.ok) {
     Dialog.hide();
-    alert(L.steamAdded(result.name, result.tool));
+    alert(L.steamAdded(result.name, result.tool) + (appid ? "\n" + L.appidWritten(appid.id, appid.name) : ""));
   } else if (result.code === "exists") {
     if (confirm(L.steamExists)) addToSteam(true);
   } else if (result.code === "no_answer" || result.code === "no_steam_client") {
@@ -1251,6 +1303,221 @@ async function addToSteam(force = false) {
 }
 
 $(".act-add-steam").addEventListener("click", () => addToSteam(false));
+
+$("#steam-appid").addEventListener("change", async (e) => {
+  steamPicker.root.classList.toggle("hidden", !e.target.checked);
+  if (!e.target.checked || steamPicker.input.value.trim()) return;
+  const folder = parentPath($(".dialog.steam").getAttribute("data-path"));
+  let existing = "";
+  try {
+    existing = (await (await api("GET", "appid", { drive: currentDrive, path: folder })).json()).id;
+  } catch (error) {
+    console.warn(error);
+  }
+  steamPicker.reset(APPID.test(existing) ? existing : $("#steam-name").value.trim());
+  steamPicker.input.focus();
+});
+
+// ------------------------------------------------------------------ steam_appid.txt (beta)
+
+const APPID = /^[1-9][0-9]{0,9}$/;
+const STORE_LANG = FR ? "fr" : "en";
+
+/** Text typed by the user -> App ID, from digits or a Store link; null for a name. */
+function parseAppId(text) {
+  const link = text.match(/\/app\/(\d+)/);
+  const id = link ? link[1] : text.trim();
+  return APPID.test(id) ? id : null;
+}
+
+/** Input that turns digits, a Store link or a game name into a checked App ID. */
+function AppIdPicker(root) {
+  const input = $(".appid-input", root);
+  const status = $(".appid-status", root);
+  const results = $(".appid-results", root);
+  let timer = 0;
+  let serial = 0;
+  let checked = null; // {id, found, name, type, fullgame} of the last lookup
+  let pending = null;
+
+  function setStatus(text, kind, button) {
+    status.textContent = text;
+    status.className = "appid-status" + (kind ? " " + kind : "");
+    if (button) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = button.text;
+      b.addEventListener("click", button.action);
+      status.appendChild(b);
+    }
+  }
+
+  function lookup(id) {
+    const mine = ++serial;
+    results.innerHTML = "";
+    setStatus(L.appidChecking);
+    pending = (async () => {
+      let info;
+      try {
+        info = await (await api("GET", "steam-app", { id, lang: STORE_LANG })).json();
+      } catch (error) {
+        info = { id, found: null }; // not checked: Store unreachable
+      }
+      if (mine !== serial) return;
+      checked = info;
+      if (info.found === null) setStatus(L.appidOffline, "warn");
+      else if (!info.found) setStatus(L.appidUnknown, "warn");
+      else if (info.type === "dlc" && info.fullgame) {
+        setStatus(L.appidFound(info.name, info.type), "warn", {
+          text: L.appidDlc(info.fullgame.name, info.fullgame.id),
+          action: () => select(info.fullgame.id),
+        });
+      } else setStatus(L.appidFound(info.name, info.type), "ok");
+    })();
+    return pending;
+  }
+
+  function search(term) {
+    const mine = ++serial;
+    checked = null;
+    setStatus(L.appidSearching);
+    pending = (async () => {
+      let items;
+      try {
+        items = (await (await api("GET", "steam-search", { term, lang: STORE_LANG })).json()).items;
+      } catch (error) {
+        if (mine === serial) setStatus(L.appidOfflineSearch, "warn");
+        return;
+      }
+      if (mine !== serial) return;
+      results.innerHTML = "";
+      setStatus(items.length ? "" : L.appidNoResult, items.length ? "" : "warn");
+      for (const item of items) {
+        const b = document.createElement("button");
+        b.type = "button";
+        const num = document.createElement("span");
+        num.className = "appid-num";
+        num.textContent = item.id;
+        b.append(num, item.name);
+        b.addEventListener("click", () => select(item.id));
+        results.appendChild(b);
+      }
+    })();
+    return pending;
+  }
+
+  function select(id) {
+    input.value = id;
+    input.focus();
+    return lookup(id);
+  }
+
+  function update() {
+    clearTimeout(timer);
+    const text = input.value.trim();
+    const id = parseAppId(text);
+    if (id) return checked && checked.id === id ? pending : lookup(id);
+    serial++;
+    checked = null;
+    pending = null;
+    results.innerHTML = "";
+    if (text.length < 2) return setStatus("");
+    return search(text);
+  }
+
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(update, 400);
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (parseAppId(input.value)) {
+      root.closest(".dialog").querySelector(".btn-default")?.click();
+    } else {
+      const first = $("button", results);
+      if (first) first.click();
+      else update();
+    }
+  });
+
+  return {
+    root,
+    input,
+    reset(text) {
+      clearTimeout(timer);
+      serial++;
+      checked = null;
+      pending = null;
+      input.value = text || "";
+      results.innerHTML = "";
+      setStatus("");
+      if (text) update();
+    },
+    /** The App ID to write once its lookup is over, or null when none is typed. */
+    async choice() {
+      const id = parseAppId(input.value);
+      if (!id) return null;
+      if (!checked || checked.id !== id) update();
+      await pending;
+      return checked && checked.id === id ? checked : { id, found: null };
+    },
+  };
+}
+
+const folderPicker = AppIdPicker($(".dialog.appid .appid-picker"));
+const steamPicker = AppIdPicker($(".dialog.steam .appid-picker"));
+
+async function openAppIdDialog(folder) {
+  const dialog = $(".dialog.appid");
+  dialog.setAttribute("data-path", folder);
+  $(".appid-file", dialog).textContent = joinPath(folder, "steam_appid.txt");
+  folderPicker.reset("");
+  Dialog.show("appid");
+  folderPicker.input.focus();
+  try {
+    const current = await (await api("GET", "appid", { drive: currentDrive, path: folder })).json();
+    if (!current.exists) return;
+    $(".appid-file", dialog).textContent = joinPath(folder, "steam_appid.txt") + "\n" + L.appidCurrent(current.id);
+    if (APPID.test(current.id)) folderPicker.reset(current.id);
+  } catch (error) {
+    if (error.message !== "Unauthorized") console.warn(error);
+  }
+}
+
+/** Writes the file after the checks the user must confirm. False when it was not written. */
+async function writeAppId(folder, appid) {
+  if (!appid) {
+    alert(L.appidInvalid);
+    return false;
+  }
+  if (appid.found === false && !confirm(L.appidUnverified(appid.id))) return false;
+  const params = { drive: currentDrive, path: folder, id: appid.id };
+  Dialog.loading.show(L.appidWriting);
+  try {
+    let result = await (await api("POST", "appid", params)).json();
+    if (!result.ok && result.code === "exists") {
+      Dialog.loading.hide();
+      if (!confirm(L.appidReplace(result.id, appid.id))) return false;
+      Dialog.loading.show(L.appidWriting);
+      result = await (await api("POST", "appid", { ...params, force: "1" })).json();
+    }
+    Dialog.loading.hide();
+    return result.ok;
+  } catch (error) {
+    fail(error);
+    return false;
+  }
+}
+
+$(".act-appid").addEventListener("click", () => openAppIdDialog(currentPath));
+
+$(".act-write-appid").addEventListener("click", async () => {
+  const folder = $(".dialog.appid").getAttribute("data-path");
+  if (!(await writeAppId(folder, await folderPicker.choice()))) return;
+  Dialog.hide();
+  if (folder === currentPath) fetchFiles(currentDrive, currentPath);
+});
 
 // ------------------------------------------------------------------ clicks
 
@@ -1347,12 +1614,12 @@ $(".act-save-oinput-file").addEventListener("click", async () => {
   fetchFiles(currentDrive, currentPath);
 });
 
-$(".oinput-text-submit").addEventListener("keyup", function (e) {
+$$(".oinput-text-submit").forEach((input) => input.addEventListener("keyup", function (e) {
   if (e.key === "Enter") {
     e.preventDefault();
     this.closest(".dialog").querySelector(".btn-default")?.click();
   }
-});
+}));
 
 window.addEventListener("keydown", (e) => {
   if (e.key !== "Escape" || $(".dialog-background.hidden")) return;

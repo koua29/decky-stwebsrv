@@ -71,6 +71,12 @@ LAUNCH_EXT = {
 }
 SHORTCUT_TIMEOUT = 20  # seconds the web request waits for Steam's answer
 
+# steam_appid.txt tells a Steamworks game its App ID when Steam did not start it (beta).
+APPID_FILE = "steam_appid.txt"
+APPID_RE = re.compile(r"[1-9][0-9]{0,9}")
+STORE_API = "https://store.steampowered.com/api"
+STORE_CACHE_SECONDS = 3600
+
 # Resumable uploads: the page sends a file in chunks, each checked by CRC32.
 PART_SUFFIX = ".stwebsrv-part"
 MAX_UPLOAD_CHUNK = 64 * 1024 * 1024
@@ -933,6 +939,57 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         }
         self._json(self.server_ref.plugin.add_steam_shortcut(request))
 
+    # ---- steam_appid.txt (beta)
+
+    def _appid_folder(self, q):
+        _, folder = _resolve(q.get("drive", "home"), q.get("path", "/"))
+        if not os.path.isdir(folder):
+            raise HttpError(404, "Not a folder")
+        return folder
+
+    def _api_get_appid(self, q):
+        path = os.path.join(self._appid_folder(q), APPID_FILE)
+        self._json({"exists": os.path.lexists(path), "id": _read_appid(path)})
+
+    def _api_post_appid(self, q):
+        """Writes the App ID in the folder's steam_appid.txt; force=1 replaces another ID."""
+        path = os.path.join(self._appid_folder(q), APPID_FILE)
+        app_id = (q.get("id") or "").strip()
+        if not APPID_RE.fullmatch(app_id):
+            raise HttpError(400, "Invalid Steam App ID")
+        if os.path.isdir(path):
+            raise HttpError(409, "steam_appid.txt is a folder")
+        current = _read_appid(path)
+        if current == app_id:
+            return self._json({"ok": True, "code": "unchanged", "id": app_id})
+        if os.path.lexists(path) and q.get("force") != "1":
+            return self._json({"ok": False, "code": "exists", "id": current})
+        tmp = path + PART_SUFFIX
+        with open(tmp, "w", encoding="ascii") as f:
+            f.write(app_id)  # just the number, as Valve's samples do
+        os.replace(tmp, path)
+        decky.logger.info("steam_appid.txt %s in %s", app_id, os.path.dirname(path))
+        self._json({"ok": True, "code": "written", "id": app_id})
+
+    def _store(self, fetch):
+        try:
+            return fetch()
+        except (OSError, ValueError) as e:  # URLError, timeouts, bad JSON
+            decky.logger.info("Steam Store: %s", e)
+            raise HttpError(502, "Steam Store unreachable")
+
+    def _api_get_steam_app(self, q):
+        app_id = (q.get("id") or "").strip()
+        if not APPID_RE.fullmatch(app_id):
+            raise HttpError(400, "Invalid Steam App ID")
+        self._json(self._store(lambda: _store_app(app_id, q.get("lang"))))
+
+    def _api_get_steam_search(self, q):
+        term = (q.get("term") or "").strip()
+        if not 2 <= len(term) <= 100:
+            raise HttpError(400, "Search needs 2 to 100 characters")
+        self._json({"items": self._store(lambda: _store_search(term, q.get("lang")))})
+
 
 class _Unseekable:
     """Write-only stream for zipfile: no seek, so it writes data descriptors."""
@@ -1028,6 +1085,58 @@ def _latest_release(current, beta=False):
 
 
 # --------------------------------------------------------------------------- plugin
+
+# --------------------------------------------------------------------------- Steam Store (beta)
+
+_store_cache = {}
+
+
+def _read_appid(path):
+    """Text of an existing steam_appid.txt (first line, 32 characters max), '' if none."""
+    try:
+        with open(path, "rb") as f:
+            text = f.read(256).decode("utf-8", "replace")
+    except OSError:
+        return ""
+    return (text.strip().splitlines() or [""])[0].strip()[:32]
+
+
+def _store_json(route, params):
+    url = f"{STORE_API}/{route}?{urllib.parse.urlencode(params)}"
+    hit = _store_cache.get(url)
+    if hit and time.time() - hit[0] < STORE_CACHE_SECONDS:
+        return hit[1]
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=10, context=_SSL) as resp:
+        data = json.loads(resp.read(4 * 1024 * 1024).decode("utf-8", "replace"))
+    if len(_store_cache) > 300:
+        _store_cache.clear()
+    _store_cache[url] = (time.time(), data)
+    return data
+
+
+def _store_lang(lang):
+    return ("french", "FR") if lang == "fr" else ("english", "US")
+
+
+def _store_app(app_id, lang):
+    """Name and type of an App ID; a DLC also names its base game, whose ID the game expects."""
+    language, _ = _store_lang(lang)
+    entry = (_store_json("appdetails", {"appids": app_id, "filters": "basic", "l": language}) or {}).get(app_id) or {}
+    if not entry.get("success"):
+        return {"id": app_id, "found": False}
+    info = entry.get("data") or {}
+    full = info.get("fullgame") or {}
+    return {"id": app_id, "found": True, "name": str(info.get("name") or ""), "type": str(info.get("type") or ""),
+            "fullgame": {"id": str(full["appid"]), "name": str(full.get("name") or "")} if full.get("appid") else None}
+
+
+def _store_search(term, lang):
+    language, country = _store_lang(lang)  # storesearch returns nothing without a country
+    data = _store_json("storesearch/", {"term": term, "l": language, "cc": country}) or {}
+    return [{"id": str(item["id"]), "name": str(item.get("name") or "")}
+            for item in data.get("items") or [] if item.get("type") == "app" and item.get("id")][:10]
+
 
 class Plugin:
     settings = dict(DEFAULT_SETTINGS)

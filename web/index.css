@@ -535,6 +535,60 @@ svg > path {
   opacity: 0.75;
   margin-bottom: 0;
 }
+.dialog.appid {
+  max-width: 440px;
+}
+.appid-picker .appid-input {
+  margin-bottom: 6px;
+}
+.dialog.steam .appid-picker {
+  margin-bottom: 10px;
+}
+.appid-status {
+  min-height: 1.3em;
+  word-break: break-word;
+}
+.appid-status:empty {
+  min-height: 0;
+}
+.appid-results button:hover .appid-num,
+.appid-results button:focus .appid-num {
+  opacity: 1;
+}
+.appid-status.ok {
+  color: var(--color);
+}
+.appid-status.warn {
+  opacity: 0.85;
+}
+.appid-status button,
+.appid-results button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 4px;
+  padding: 4px 6px;
+  border: 1px solid var(--light-color);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.appid-status button:hover,
+.appid-results button:hover,
+.appid-results button:focus {
+  background-color: var(--color);
+  color: var(--background);
+}
+.appid-results {
+  max-height: 180px;
+  overflow-y: auto;
+}
+.appid-results .appid-num {
+  opacity: 0.7;
+  float: right;
+  margin-left: 8px;
+}
 .beta-tag {
   font-size: 10px;
   border: 1px solid var(--color);
