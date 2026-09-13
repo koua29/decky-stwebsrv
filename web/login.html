@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<!-- Adapted from the Bruce firmware WebUI login page (AGPL-3.0). -->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STWebSRV</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="stylesheet" href="/index.css">
+    <link rel="stylesheet" href="/theme.css">
+</head>
+
+<body>
+    <div class="dialog-background">
+        <form action="/login" method="POST">
+            <div class="dialog login">
+                <div class="dialog-head">
+                    <img class="login-logo" src="/logo.png" alt="STWebSRV">
+                </div>
+                <div class="dialog-body">
+                    <div id="notice" style="display: none;font-weight: bold;padding-bottom: 5px;"></div>
+                    <label for="username" class="oinput-label" data-i18n="username">Username</label>
+                    <input type="text" name="username" id="username" class="oinput-text-submit"
+                        autocapitalize="none" autocomplete="username" style="margin-bottom: 10px">
+                    <label for="password" class="oinput-label" data-i18n="password">Password</label>
+                    <input type="password" name="password" id="password" class="oinput-text-submit"
+                        autocomplete="current-password">
+                    <p class="login-hint" data-i18n="hint">Both are shown in the STWebSRV panel of the Decky menu.</p>
+                </div>
+                <div class="dialog-footer">
+                    <input type="submit" class="btn-action btn-default" value="Login" id="submit">
+                </div>
+            </div>
+        </form>
+    </div>
+    <script>
+        const FR = (navigator.language || "").toLowerCase().startsWith("fr");
+        const L = FR ? {
+            username: "Identifiant", password: "Mot de passe", submit: "Connexion",
+            hint: "Les deux sont affichés dans le panneau STWebSRV du menu Decky.",
+            failed: "Identifiant ou mot de passe incorrect.",
+            locked: "Trop d'essais : patiente 30 secondes.",
+            loggedout: "Tu es déconnecté.",
+        } : {
+            username: "Username", password: "Password", submit: "Login",
+            hint: "Both are shown in the STWebSRV panel of the Decky menu.",
+            failed: "Wrong username or password.",
+            locked: "Too many attempts: wait 30 seconds.",
+            loggedout: "You have been logged out.",
+        };
+        document.querySelectorAll("[data-i18n]").forEach((e) => (e.textContent = L[e.dataset.i18n]));
+        document.getElementById("submit").value = L.submit;
+
+        const params = new URLSearchParams(location.search);
+        const notice = document.getElementById("notice");
+        for (const key of ["failed", "locked", "loggedout"]) {
+            if (params.has(key)) {
+                notice.style.display = "block";
+                notice.textContent = L[key];
+            }
+        }
+        const user = document.getElementById("username");
+        if (!user.value) user.value = "deck";
+        document.getElementById("password").focus();
+    </script>
+</body>
+
+</html>

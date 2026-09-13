@@ -1,0 +1,11 @@
+{
+  "name": "STWebSRV",
+  "author": "koua29",
+  "flags": [],
+  "api_version": 1,
+  "publish": {
+    "tags": ["files", "web", "transfer"],
+    "description": "Starts a web file manager on your device: browse, download, upload, rename and edit files from any browser on your network.",
+    "image": ""
+  }
+}
