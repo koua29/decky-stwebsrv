@@ -59,6 +59,22 @@ const L = FR
       tooLarge: "Fichier trop gros pour l'éditeur (2 Mo max). Le télécharger ?",
       failed: (m) => `Échec : ${m}`,
       uploadFailed: (n) => `${n} envoi(s) ont échoué.`,
+      addToSteam: "Ajouter à Steam",
+      addToSteamButton: "Ajouter à Steam",
+      betaTag: "bêta",
+      steamName: "Nom dans Steam :",
+      useProton: "Lancer avec Proton (programme Windows)",
+      launchOptions: "Options de lancement (facultatif) :",
+      steamHint:
+        "Le raccourci apparaît dans la bibliothèque Steam (onglet Non-Steam). La console doit être en mode Jeu, avec Decky actif.",
+      steamAdding: "Ajout à Steam…",
+      steamAdded: (name, tool) =>
+        `« ${name} » est ajouté à Steam${tool ? ` (${tool})` : ""}.\n\nRetrouve-le dans la bibliothèque, onglet Non-Steam.`,
+      steamExists: "Ce fichier est déjà dans ta bibliothèque Steam. L'ajouter une seconde fois ?",
+      steamNoAnswer:
+        "Steam n'a pas répondu. La console doit être en mode Jeu (pas en mode Bureau), avec Decky actif.",
+      steamFailed: (detail) => `Steam n'a pas pu créer le raccourci${detail ? ` : ${detail}` : "."}`,
+      nativeNote: "Programme Linux : il sera rendu exécutable si besoin.",
     }
   : {
       logout: "Log Out",
@@ -104,6 +120,21 @@ const L = FR
       tooLarge: "Too large for the editor (2 MB max). Download it instead?",
       failed: (m) => `Failed: ${m}`,
       uploadFailed: (n) => `${n} upload(s) failed.`,
+      addToSteam: "Add to Steam",
+      addToSteamButton: "Add to Steam",
+      betaTag: "beta",
+      steamName: "Name in Steam:",
+      useProton: "Run with Proton (Windows program)",
+      launchOptions: "Launch options (optional):",
+      steamHint:
+        "The shortcut appears in the Steam library (Non-Steam tab). The console must be in Game Mode with Decky running.",
+      steamAdding: "Adding to Steam…",
+      steamAdded: (name, tool) =>
+        `"${name}" was added to Steam${tool ? ` (${tool})` : ""}.\n\nFind it in the library, Non-Steam tab.`,
+      steamExists: "This file is already in your Steam library. Add it a second time?",
+      steamNoAnswer: "Steam did not answer. The console must be in Game Mode (not Desktop Mode), with Decky running.",
+      steamFailed: (detail) => `Steam could not create the shortcut${detail ? `: ${detail}` : "."}`,
+      nativeNote: "Linux program: it will be made executable if needed.",
     };
 
 function applyI18n(root = document) {
@@ -274,6 +305,13 @@ function startDownload(url) {
   a.remove();
 }
 
+function launchKind(name) {
+  const lower = name.toLowerCase();
+  if (launchExt.windows.some((ext) => lower.endsWith(ext))) return "windows";
+  if (launchExt.native.some((ext) => lower.endsWith(ext))) return "native";
+  return null;
+}
+
 const IMAGE = /\.(png|jpe?g|gif|webp|bmp|svg|avif|ico)$/i;
 const VIDEO = /\.(mp4|webm|mkv|mov|m4v)$/i;
 const AUDIO = /\.(mp3|ogg|oga|opus|wav|flac|m4a|aac)$/i;
@@ -284,6 +322,7 @@ const EDIT_LIMIT = 2 * 1024 * 1024;
 // ------------------------------------------------------------------ state and listing
 
 let drives = [];
+let launchExt = { windows: [], native: [] };
 let currentDrive;
 let currentPath;
 let currentEntries = [];
@@ -382,6 +421,7 @@ function renderFileRows(data) {
     } else {
       name.classList.add("act-open-file");
       e.querySelector(".col-action").classList.add("type-file");
+      if (launchKind(entry.name)) e.querySelector(".col-action").classList.add("launchable");
     }
     tbody.appendChild(e);
   }
@@ -422,6 +462,7 @@ async function fetchFiles(drive, path) {
 async function fetchSystemInfo() {
   const info = await (await api("GET", "info")).json();
   drives = info.drives;
+  launchExt = info.launch_ext || launchExt;
   $(".app-version").textContent = info.version;
   $(".host-name").textContent = info.hostname;
 
@@ -816,6 +857,60 @@ function openFile(row) {
   openEditor(path);
 }
 
+// ------------------------------------------------------------------ add to Steam (beta)
+
+function openSteamDialog(path) {
+  const fileName = path.substring(path.lastIndexOf("/") + 1);
+  const kind = launchKind(fileName);
+  const dialog = $(".dialog.steam");
+  dialog.setAttribute("data-path", path);
+  $(".steam-file", dialog).textContent = kind === "native" ? `${path}\n${L.nativeNote}` : path;
+  $("#steam-name").value = fileName.replace(/\.[^.]+$/, "");
+  $("#steam-proton").checked = kind === "windows";
+  $("#steam-options").value = "";
+  Dialog.show("steam");
+  $("#steam-name").focus();
+  $("#steam-name").select();
+}
+
+async function addToSteam(force = false) {
+  const dialog = $(".dialog.steam");
+  const name = $("#steam-name").value.trim();
+  if (!name) {
+    alert(L.emptyName);
+    return;
+  }
+  const params = {
+    drive: currentDrive,
+    path: dialog.getAttribute("data-path"),
+    name,
+    proton: $("#steam-proton").checked ? "1" : "0",
+    options: $("#steam-options").value.trim(),
+  };
+  if (force) params.force = "1";
+  Dialog.loading.show(L.steamAdding);
+  let result;
+  try {
+    result = await (await api("POST", "steam", params)).json();
+  } catch (error) {
+    fail(error);
+    return;
+  }
+  Dialog.loading.hide();
+  if (result.ok) {
+    Dialog.hide();
+    alert(L.steamAdded(result.name, result.tool));
+  } else if (result.code === "exists") {
+    if (confirm(L.steamExists)) addToSteam(true);
+  } else if (result.code === "no_answer" || result.code === "no_steam_client") {
+    alert(L.steamNoAnswer);
+  } else {
+    alert(L.steamFailed(result.detail || result.code));
+  }
+}
+
+$(".act-add-steam").addEventListener("click", () => addToSteam(false));
+
 // ------------------------------------------------------------------ clicks
 
 document.addEventListener("click", async (e) => {
@@ -851,6 +946,13 @@ document.addEventListener("click", async (e) => {
     } else {
       Dialog.showOneInput(action, "", `${action}|${currentPath}`);
     }
+    return;
+  }
+
+  const actSteam = e.target.closest(".act-steam");
+  if (actSteam) {
+    e.preventDefault();
+    openSteamDialog(actSteam.closest("tr").getAttribute("data-path"));
     return;
   }
 

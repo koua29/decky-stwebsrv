@@ -21,6 +21,7 @@ import banner from "../assets/stwebsrv-banner-panel.png";
 import icon from "../assets/stwebsrv-icon-128.png";
 import { FocusRow } from "./focus";
 import { lang, t } from "./i18n";
+import { handleShortcutRequest, type ShortcutRequest } from "./shortcut";
 import type { Settings, State, Update } from "./types";
 
 const getState = callable<[], State>("get_state");
@@ -337,6 +338,20 @@ export default definePlugin(() => {
   const onUpdate = addEventListener<[version: string, title: string]>("stw_update", (version, title) =>
     toaster.toast({ title: t.toastUpdate(version), body: title || t.toastUpdateBody, logo: <Icon size="100%" /> }),
   );
+  // Registered with the plugin, not the panel: the web page can ask while the menu is closed.
+  const onShortcut = addEventListener<[request: ShortcutRequest]>("stw_add_shortcut", (request) =>
+    handleShortcutRequest(request, (name, appId) =>
+      toaster.toast({
+        title: t.toastShortcutAdded,
+        body: name,
+        logo: <Icon size="100%" />,
+        onClick: () => {
+          Navigation.Navigate(`/library/app/${appId}`);
+          Navigation.CloseSideMenus();
+        },
+      }),
+    ),
+  );
 
   return {
     name: PLUGIN_NAME,
@@ -351,6 +366,7 @@ export default definePlugin(() => {
     onDismount() {
       removeEventListener("stw_idle_stop", onIdleStop);
       removeEventListener("stw_update", onUpdate);
+      removeEventListener("stw_add_shortcut", onShortcut);
     },
   };
 });

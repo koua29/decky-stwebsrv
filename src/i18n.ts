@@ -71,6 +71,7 @@ const en = {
   toastUpdateFoundBody: "The button is at the bottom of the panel, under Check for updates.",
   toastUpdate: (version: string) => `STWebSRV ${version} is available`,
   toastUpdateBody: "Open STWebSRV in the Decky menu to install it.",
+  toastShortcutAdded: "Added to Steam from the web page",
 };
 
 const fr: typeof en = {
@@ -127,6 +128,7 @@ const fr: typeof en = {
   toastUpdateFoundBody: "Le bouton est en bas du panneau, sous « Vérifier les mises à jour ».",
   toastUpdate: (version) => `Mise à jour STWebSRV ${version} disponible`,
   toastUpdateBody: "Ouvre STWebSRV dans le menu Decky pour l'installer.",
+  toastShortcutAdded: "Ajouté à Steam depuis la page web",
 };
 
 export const t = lang === "fr" ? fr : en;

@@ -186,6 +186,21 @@
           <td class="col-name"></td>
           <td class="col-size"></td>
           <td class="col-action">
+            <button class="icon-action act-steam" data-i18n-title="addToSteam"><svg
+                version="1.1"
+                xmlns="http://www.w3.org/2000/svg"
+                xmlns:xlink="http://www.w3.org/1999/xlink"
+                viewBox="0 0 153.6 153.6"
+                width="20"
+                height="20"
+                style="enable-background: new 0 0 153.6 153.6"
+                xml:space="preserve"
+              >
+                <path
+                  d="M48.3,126.3V49.1c0-4.7,5.4-7.4,9.1-4.5l49.3,37.4c2.9,2.2,3,6.6,0.1,9l-49.3,39.8C53.8,133.7,48.3,131.1,48.3,126.3z"
+                  fill="#02de02"
+                ></path>
+              </svg></button>
             <a class="icon-action act-download" data-i18n-title="download"><svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
@@ -291,6 +306,27 @@
         </div>
         <div class="dialog-footer">
           <button class="btn-action btn-default act-save-oinput-file"></button>
+          <button class="btn-action act-dialog-close act-escape" data-i18n="close">Close</button>
+        </div>
+      </div>
+      <div class="dialog steam hidden">
+        <div class="dialog-head">
+          <span data-i18n="addToSteam">Add to Steam</span> <span class="beta-tag" data-i18n="betaTag">beta</span>
+        </div>
+        <div class="dialog-body">
+          <p class="steam-file"></p>
+          <label for="steam-name" class="oinput-label" data-i18n="steamName">Name in Steam:</label>
+          <input type="text" id="steam-name" class="oinput-text-submit" autocomplete="off" />
+          <label class="check-row">
+            <input type="checkbox" id="steam-proton" />
+            <span data-i18n="useProton">Run with Proton (Windows program)</span>
+          </label>
+          <label for="steam-options" class="oinput-label" data-i18n="launchOptions">Launch options (optional):</label>
+          <input type="text" id="steam-options" class="oinput-text-submit" autocomplete="off" />
+          <p class="steam-hint" data-i18n="steamHint">The shortcut appears in the Steam library (Non-Steam tab). The console must be in Game Mode with Decky running.</p>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn-action btn-default act-add-steam" data-i18n="addToSteamButton">Add to Steam</button>
           <button class="btn-action act-dialog-close act-escape" data-i18n="close">Close</button>
         </div>
       </div>

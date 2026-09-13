@@ -44,6 +44,7 @@ La page web est adaptée de la **WebUI du firmware [Bruce](https://github.com/Br
 - **Éditeur de texte** intégré, repris de Bruce : numéros de ligne, indentation avec Tab / Maj+Tab, fermeture automatique des parenthèses et guillemets, commentaires avec Ctrl+/ ou Ctrl+#, **enregistrement avec Ctrl+S**, alerte si on ferme sans enregistrer. Idéal pour les fichiers de configuration (`.ini`, `.cfg`, `.json`, `.conf`…).
 - **Aperçu** des images, vidéos et fichiers audio dans la page.
 - **Renommer, supprimer** (avec confirmation), **créer un fichier ou un dossier**.
+- 🧪 **Ajouter à Steam** (bêta, à partir de la 0.2.0-beta.1) : un bouton ▶ sur les programmes (`.exe`, `.bat`, `.msi`, `.sh`, `.AppImage`…) crée un **raccourci « jeu non-Steam »** dans la bibliothèque, sans redémarrer Steam. Nom modifiable, **Proton activé d'office pour les programmes Windows** (Proton Experimental s'il est installé, sinon le Proton le plus récent), options de lancement facultatives, rendu exécutable si besoin pour les programmes Linux. Si le fichier est déjà dans Steam, la page demande confirmation avant de créer un doublon. Une notification s'affiche sur la console ; un appui ouvre la fiche du jeu.
 - Page **utilisable sur téléphone** et sur ordinateur.
 - **Français ou anglais**, selon la langue du navigateur (et celle de Steam pour le panneau).
 
@@ -84,6 +85,7 @@ Télécharger `STWebSRV.zip` depuis la page [Releases](https://github.com/koua29
 - Chaque chemin est vérifié côté serveur : **impossible de sortir du disque choisi**, même par un lien symbolique. Supprimer ou renommer un lien agit sur le lien, jamais sur sa cible.
 - **Protection contre les essais de mot de passe** : après 5 erreurs, la connexion est bloquée 30 secondes, et chaque échec est ralenti.
 - Les modifications exigent la session (cookie `HttpOnly`, `SameSite=Strict`) et un en-tête propre à la page, ce qui bloque les requêtes forgées depuis un autre site. Les fichiers ouverts dans le navigateur sont servis dans un bac à sable (un fichier HTML envoyé ne peut rien exécuter).
+- **Ajouter à Steam** ne lance rien : il crée seulement le raccourci, que tu démarres toi-même depuis la bibliothèque. Il ne fonctionne qu'en mode Jeu, avec Decky actif.
 - Le mot de passe est rangé dans `~/homebrew/settings/STWebSRV/settings.json`, lisible par le seul utilisateur.
 - La connexion est en **HTTP simple** sur le réseau local, comme la WebUI de Bruce : n'active le serveur que sur un réseau de confiance (ton Wi-Fi à la maison, pas celui d'un hôtel).
 

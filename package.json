@@ -1,6 +1,6 @@
 {
   "name": "decky-stwebsrv",
-  "version": "0.1.0",
+  "version": "0.2.0-beta.1",
   "description": "STWebSRV (Steam Web Server), a Decky plugin: starts a web file manager on your SteamOS device to browse, download, upload and edit files from any browser on your network.",
   "type": "module",
   "scripts": {

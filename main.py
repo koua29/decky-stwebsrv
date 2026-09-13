@@ -17,6 +17,7 @@ import secrets
 import shutil
 import socket
 import ssl
+import stat
 import subprocess
 import threading
 import time
@@ -61,9 +62,17 @@ THEMES = {
 }
 PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no 0/o, 1/l/i
 
+# Files the web page can add to Steam as non-Steam games (beta).
+LAUNCH_EXT = {
+    "windows": [".exe", ".bat", ".cmd", ".msi"],             # run through Proton
+    "native": [".sh", ".appimage", ".x86_64", ".x86", ".run"],
+}
+SHORTCUT_TIMEOUT = 20  # seconds the web request waits for Steam's answer
+
 DEFAULT_SETTINGS = {"port": DEFAULT_PORT, "user": "deck", "password": "", "idle_minutes": 15,
                     "theme": "steam", "notify": True, "language": "en", "beta": IS_PRERELEASE}
 SETTINGS_FILE = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "settings.json")
+SHORTCUTS_FILE = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "shortcuts.json")
 
 
 # --------------------------------------------------------------------------- storage
@@ -221,6 +230,15 @@ def _valid_name(name):
     return name
 
 
+def _launch_kind(path):
+    """'windows', 'native' or None: how Steam would run this file."""
+    lower = path.lower()
+    for kind, extensions in LAUNCH_EXT.items():
+        if lower.endswith(tuple(extensions)):
+            return kind
+    return None
+
+
 def _makedirs_inside(root, directory):
     """os.makedirs, refusing to create anything through a link that leaves the drive."""
     existing = directory
@@ -270,7 +288,7 @@ def _info():
             used = total = 0
         drives.append({"id": d["id"], "label": d["label"], "used": _human(used), "total": _human(total)})
     return {"version": CURRENT_VERSION, "hostname": socket.gethostname(),
-            "drives": drives, "shortcuts": _shortcuts()}
+            "drives": drives, "shortcuts": _shortcuts(), "launch_ext": LAUNCH_EXT}
 
 
 # --------------------------------------------------------------------------- web server
@@ -708,6 +726,36 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self._send(200, "Deleted")
 
 
+    def _api_post_steam(self, q):
+        """Adds the file to Steam as a non-Steam game, through the Decky panel."""
+        _, full = _resolve(q.get("drive", "home"), q.get("path"))
+        if not os.path.isfile(full):
+            raise HttpError(404, "Not a file")
+        kind = _launch_kind(full)
+        if kind is None:
+            raise HttpError(415, "Steam cannot launch this kind of file")
+        if '"' in full:
+            raise HttpError(400, "The path contains a double quote")
+        name = (q.get("name") or "").strip() or os.path.splitext(os.path.basename(full))[0]
+        options = (q.get("options") or "").strip()
+        if len(name) > 200 or len(options) > 1000 or "\x00" in name + options:
+            raise HttpError(400, "Invalid name or launch options")
+        if kind == "native":
+            mode = os.stat(full).st_mode
+            if not mode & stat.S_IXUSR:  # Steam runs the file itself: it must be executable
+                os.chmod(full, mode | stat.S_IXUSR)
+        request = {
+            "path": full,
+            "name": name,
+            "exe": f'"{full}"',  # quoted the way Steam stores shortcuts
+            "start_dir": f'"{os.path.dirname(full)}"',
+            "options": options,
+            "proton": q.get("proton", "1" if kind == "windows" else "0") == "1",
+            "force": q.get("force") == "1",
+        }
+        self._json(self.server_ref.plugin.add_steam_shortcut(request))
+
+
 class _Unseekable:
     """Write-only stream for zipfile: no seek, so it writes data descriptors."""
 
@@ -811,8 +859,14 @@ class Plugin:
     last_update_check = 0
     update_notified = ""
     task = None
+    loop = None
+    pending = None
+    shortcut_lock = None
 
     async def _main(self):
+        self.loop = asyncio.get_running_loop()
+        self.pending = {}
+        self.shortcut_lock = threading.Lock()
         self.settings = {**DEFAULT_SETTINGS, **_load(SETTINGS_FILE, {})}
         if not self.settings["password"]:
             self.settings["password"] = _new_password()
@@ -871,6 +925,46 @@ class Plugin:
 
     async def check_update(self):
         return self.update if await self._check_update() else None
+
+    async def shortcut_result(self, request_id, result):
+        """Answer of the Decky panel to a stw_add_shortcut event."""
+        waiter = (self.pending or {}).get(request_id)
+        if waiter:
+            waiter["result"] = result if isinstance(result, dict) else {"ok": False, "code": "error"}
+            waiter["event"].set()
+
+    # ---- called from web server threads
+
+    def add_steam_shortcut(self, request):
+        """Asks the panel to create the shortcut and waits for its answer.
+
+        Only the frontend can reach SteamClient, so the request travels as an
+        event and comes back through shortcut_result. One at a time: Steam
+        misbehaves when shortcuts are created concurrently.
+        """
+        with self.shortcut_lock:
+            known = _load(SHORTCUTS_FILE, {})
+            request_id = secrets.token_hex(8)
+            waiter = {"event": threading.Event(), "result": None}
+            self.pending[request_id] = waiter
+            payload = {k: v for k, v in request.items() if k != "path"}
+            payload.update(id=request_id, existing=int((known.get(request["path"]) or {}).get("appid", 0)))
+            try:
+                asyncio.run_coroutine_threadsafe(decky.emit("stw_add_shortcut", payload), self.loop)
+                answered = waiter["event"].wait(SHORTCUT_TIMEOUT)
+            finally:
+                self.pending.pop(request_id, None)
+            if not answered:
+                return {"ok": False, "code": "no_answer"}
+            result = waiter["result"]
+            if result.get("ok") and result.get("appid"):
+                known[request["path"]] = {"appid": int(result["appid"]), "name": request["name"],
+                                          "ts": int(time.time())}
+                _save(SHORTCUTS_FILE, known)
+            decky.logger.info("Steam shortcut %s: %s", request["name"], result)
+            return {"ok": bool(result.get("ok")), "code": str(result.get("code") or ""),
+                    "appid": int(result.get("appid") or 0), "tool": str(result.get("tool") or ""),
+                    "detail": str(result.get("detail") or "")[:300], "name": request["name"]}
 
     # ---- internals
 
