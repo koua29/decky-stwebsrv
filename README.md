@@ -101,7 +101,7 @@ STWebSRV checks once a day whether a new version is available on GitHub. When th
 
 You can also check by hand (**Check for updates**, at the bottom of the panel), or reinstall from the URL above, which always points to the latest stable version.
 
-Each version is published in the [Releases](https://github.com/koua29/decky-stwebsrv/releases) with a `vX.Y.Z` tag and its changelog (in French).
+Each version is published in the [Releases](https://github.com/koua29/decky-stwebsrv/releases) with a `vX.Y.Z` tag and its changelog.
 
 ### Beta versions
 
