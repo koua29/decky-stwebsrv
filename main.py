@@ -70,7 +70,8 @@ LAUNCH_EXT = {
 SHORTCUT_TIMEOUT = 20  # seconds the web request waits for Steam's answer
 
 DEFAULT_SETTINGS = {"port": DEFAULT_PORT, "user": "deck", "password": "", "idle_minutes": 15,
-                    "theme": "steam", "notify": True, "language": "en", "beta": IS_PRERELEASE}
+                    "theme": "steam", "notify": True, "language": "en", "beta": IS_PRERELEASE,
+                    "address": "auto"}
 SETTINGS_FILE = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "settings.json")
 SHORTCUTS_FILE = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "shortcuts.json")
 
@@ -99,33 +100,69 @@ def _new_password():
 
 # --------------------------------------------------------------------------- network
 
-_ips_cache = (0.0, [])
+_addr_cache = (0.0, [])
+KIND_ORDER = {"ethernet": 0, "wifi": 1, "other": 2}
 
 
-def _lan_ips():
-    """IPv4 addresses other devices can reach, the default route's first (cached 15 s)."""
-    global _ips_cache
-    if time.time() - _ips_cache[0] < 15:
-        return _ips_cache[1]
-    ips = []
+def _iface_kind(name):
+    """'ethernet', 'wifi' or 'other' (bridges, containers, VPN tunnels), read from sysfs."""
+    base = f"/sys/class/net/{name}"
+    if os.path.isdir(base + "/wireless") or os.path.exists(base + "/phy80211"):
+        return "wifi"
+    try:
+        with open(base + "/type", encoding="ascii") as f:
+            arp_type = f.read().strip()
+        physical = os.path.exists(base + "/device")
+    except OSError:  # no sysfs: guess from the usual names
+        return "ethernet" if name.startswith(("en", "eth")) else "wifi" if name.startswith("wl") else "other"
+    return "ethernet" if arp_type == "1" and physical else "other"  # USB dock adapters count as ethernet
+
+
+def _default_route_ip():
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("10.255.255.255", 1))  # no packet is sent
-            ips.append(s.getsockname()[0])
+            s.connect(("10.255.255.255", 1))  # no packet is sent: only picks the source address
+            return s.getsockname()[0]
     except OSError:
-        pass
+        return ""
+
+
+def _parse_ip_addr(output):
+    """(interface, address) pairs from `ip -4 -o addr show scope global`."""
+    return re.findall(r"^\d+:\s+([^\s:@]+)[^\n]*?\binet (\d+\.\d+\.\d+\.\d+)/", output, re.M)
+
+
+def _addresses():
+    """Reachable IPv4 addresses, wired first, then Wi-Fi, then the rest (cached 15 s).
+
+    The server listens on all of them; this only decides which one the panel shows.
+    """
+    global _addr_cache
+    if time.time() - _addr_cache[0] < 15:
+        return _addr_cache[1]
+    default_ip = _default_route_ip()
     try:
-        out = subprocess.run(["ip", "-4", "-o", "addr", "show", "scope", "global"],
-                             capture_output=True, text=True, timeout=3).stdout
-        ips += re.findall(r"inet (\d+\.\d+\.\d+\.\d+)/", out)
+        output = subprocess.run(["ip", "-4", "-o", "addr", "show", "scope", "global"],
+                                capture_output=True, text=True, timeout=3).stdout
     except (OSError, subprocess.SubprocessError):
-        pass
-    seen = []
-    for ip in ips:
-        if ip not in seen and not ip.startswith("127."):
-            seen.append(ip)
-    _ips_cache = (time.time(), seen)
-    return seen
+        output = ""
+    found = []
+    for iface, ip in _parse_ip_addr(output):
+        if ip.startswith("127.") or any(a["ip"] == ip for a in found):
+            continue
+        found.append({"iface": iface, "ip": ip, "kind": _iface_kind(iface), "default": ip == default_ip})
+    if default_ip and not default_ip.startswith("127.") and not any(a["ip"] == default_ip for a in found):
+        found.append({"iface": "", "ip": default_ip, "kind": "other", "default": True})
+    found.sort(key=lambda a: (KIND_ORDER[a["kind"]], not a["default"]))
+    _addr_cache = (time.time(), found)
+    return found
+
+
+def _ordered_addresses(preferred):
+    """The chosen interface first when it is connected, the automatic order otherwise."""
+    addresses = list(_addresses())
+    chosen = [a for a in addresses if preferred != "auto" and a["iface"] == preferred]
+    return chosen + [a for a in addresses if a not in chosen]
 
 
 # --------------------------------------------------------------------------- drives
@@ -916,6 +953,9 @@ class Plugin:
             self.settings[key] = "fr" if str(value) == "fr" else "en"
         elif key in ("notify", "beta"):
             self.settings[key] = bool(value)
+        elif key == "address":
+            value = str(value)
+            self.settings[key] = value if re.fullmatch(r"[A-Za-z0-9_.:-]{1,32}", value) else "auto"
         else:
             return self._snapshot()
         _save(SETTINGS_FILE, self.settings)
@@ -971,7 +1011,7 @@ class Plugin:
     def _snapshot(self):
         running = bool(self.server and self.server.running)
         port = self.server.port if running else int(self.settings["port"])
-        ips = _lan_ips() if running else []
+        addresses = _ordered_addresses(self.settings["address"]) if running else []
         idle = int(self.settings["idle_minutes"])
         stops_in = None
         if running and idle:
@@ -979,7 +1019,8 @@ class Plugin:
         return {
             "running": running,
             "port": port,
-            "urls": [f"http://{ip}:{port}" for ip in ips],
+            "urls": [f"http://{a['ip']}:{port}" for a in addresses],
+            "addresses": [{**a, "url": f"http://{a['ip']}:{port}"} for a in addresses],
             "hostname": socket.gethostname(),
             "user": self.settings["user"],
             "password": self.settings["password"],

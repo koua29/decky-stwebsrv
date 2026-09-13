@@ -26,6 +26,7 @@ La page web est adaptée de la **WebUI du firmware [Bruce](https://github.com/Br
 
 - **Serveur web à la demande** : un interrupteur pour le démarrer ou l'arrêter.
 - **Adresse et QR code** : l'adresse à ouvrir (`http://<ip-de-la-console>:8088`) et un QR code à scanner avec le téléphone. Si le port 8088 est pris, le serveur prend le suivant libre.
+- **Plusieurs réseaux** (câble + Wi-Fi, dock USB…) : le serveur répond sur tous. Chaque adresse est affichée avec son type (Câble, Wi-Fi, Autre), **le câble passe en premier**, et le menu « Adresse affichée » (à partir de la 0.2.0-beta.2) permet de choisir celle du QR code. Le choix est retenu ; si la carte choisie est débranchée, l'ordre automatique reprend.
 - **Identifiant et mot de passe** affichés dans le panneau : `deck` et un mot de passe aléatoire de 8 caractères, créé à la première utilisation et conservé ensuite.
 - **Changement de mot de passe** : le bouton « Nouveau mot de passe » en génère un autre et **déconnecte immédiatement toutes les sessions ouvertes**.
 - **Visiteurs récents** : les adresses IP connectées dans les 5 dernières minutes.

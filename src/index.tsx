@@ -22,7 +22,7 @@ import icon from "../assets/stwebsrv-icon-128.png";
 import { FocusRow } from "./focus";
 import { lang, t } from "./i18n";
 import { handleShortcutRequest, type ShortcutRequest } from "./shortcut";
-import type { Settings, State, Update } from "./types";
+import type { Address, Settings, State, Update } from "./types";
 
 const getState = callable<[], State>("get_state");
 const startServer = callable<[], State>("start_server");
@@ -118,9 +118,29 @@ function UpdateRows({ update }: { update: Update }) {
   );
 }
 
-function ServerDetails({ state, onNewPassword }: { state: State; onNewPassword: () => void }) {
-  const url = state.urls[0];
+function addressLabel(address: Address) {
+  const kind = t.kind[address.kind] ?? address.kind;
+  return address.iface ? `${kind} (${address.iface}) · ${address.ip}` : `${kind} · ${address.ip}`;
+}
+
+function ServerDetails({
+  state,
+  onNewPassword,
+  onAddress,
+}: {
+  state: State;
+  onNewPassword: () => void;
+  onAddress: (iface: string) => void;
+}) {
+  const addresses = state.addresses ?? [];
+  const shown = addresses[0];
+  const url = shown?.url ?? state.urls[0];
   const qr = useMemo(() => (url ? qrDataUrl(url) : ""), [url]);
+  const choices = [
+    { data: "auto", label: t.addressAuto },
+    ...addresses.filter((a) => a.iface).map((a) => ({ data: a.iface, label: addressLabel(a) })),
+  ];
+  const selected = choices.some((c) => c.data === state.settings.address) ? state.settings.address : "auto";
 
   return (
     <>
@@ -132,13 +152,15 @@ function ServerDetails({ state, onNewPassword }: { state: State; onNewPassword: 
               <div style={{ fontSize: "16px", fontWeight: "bold", wordBreak: "break-all", textAlign: "center" }}>
                 {url}
               </div>
+              {shown && <div style={muted}>{addressLabel(shown)}</div>}
               <img
                 src={qr}
                 style={{ width: "150px", height: "150px", imageRendering: "pixelated", background: "#fff", borderRadius: "6px", padding: "6px" }}
               />
-              {state.urls.slice(1).map((other) => (
-                <div key={other} style={muted}>
-                  {other}
+              {addresses.length > 1 && <div style={muted}>{t.otherAddresses}</div>}
+              {addresses.slice(1).map((other) => (
+                <div key={other.url} style={muted}>
+                  {addressLabel(other)}
                 </div>
               ))}
             </>
@@ -147,6 +169,17 @@ function ServerDetails({ state, onNewPassword }: { state: State; onNewPassword: 
           )}
         </FocusRow>
       </PanelSectionRow>
+      {addresses.length > 1 && (
+        <PanelSectionRow>
+          <DropdownItem
+            label={t.addressChoice}
+            description={t.addressChoiceHelp}
+            rgOptions={choices}
+            selectedOption={selected}
+            onChange={(option) => onAddress(option.data)}
+          />
+        </PanelSectionRow>
+      )}
       <PanelSectionRow>
         <FocusRow block="nearest" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
           <div>{t.login(state.user)}</div>
@@ -272,7 +305,9 @@ function Content() {
             <div style={{ ...muted, color: "#ff6b6b", opacity: 1 }}>{t.startFailed(state.error)}</div>
           </PanelSectionRow>
         )}
-        {state.running && <ServerDetails state={state} onNewPassword={onNewPassword} />}
+        {state.running && (
+          <ServerDetails state={state} onNewPassword={onNewPassword} onAddress={(iface) => change("address", iface)} />
+        )}
         <PanelSectionRow>
           <div style={muted}>{t.warning}</div>
         </PanelSectionRow>
