@@ -9,6 +9,8 @@ The server runs in a background thread with the plugin's own rights (the
 Decky user, not root), and every path is kept inside the chosen drive.
 """
 import asyncio
+import binascii
+import hashlib
 import http.server
 import json
 import os
@@ -68,6 +70,12 @@ LAUNCH_EXT = {
     "native": [".sh", ".appimage", ".x86_64", ".x86", ".run"],
 }
 SHORTCUT_TIMEOUT = 20  # seconds the web request waits for Steam's answer
+
+# Resumable uploads: the page sends a file in chunks, each checked by CRC32.
+PART_SUFFIX = ".stwebsrv-part"
+MAX_UPLOAD_CHUNK = 64 * 1024 * 1024
+PART_MAX_AGE = 24 * 3600      # abandoned uploads are cleaned after a day
+UPLOADS_DIR = os.path.join(getattr(decky, "DECKY_PLUGIN_RUNTIME_DIR", decky.DECKY_PLUGIN_SETTINGS_DIR), "uploads")
 
 DEFAULT_SETTINGS = {"port": DEFAULT_PORT, "user": "deck", "password": "", "idle_minutes": 15,
                     "theme": "steam", "notify": True, "language": "en", "beta": IS_PRERELEASE,
@@ -295,6 +303,8 @@ def _list(drive_id, rel):
     entries = []
     with os.scandir(full) as it:
         for entry in it:
+            if entry.name.endswith(PART_SUFFIX):  # unfinished uploads stay out of sight
+                continue
             try:
                 is_dir = entry.is_dir()  # follows links, like a file manager
                 try:
@@ -313,6 +323,58 @@ def _list(drive_id, rel):
     entries.sort(key=lambda e: (e["type"] != "dir", e["name"].lower()))
     path = "/" + os.path.relpath(full, root).replace(os.sep, "/")
     return {"drive": drive_id, "path": "/" if path == "/." else path, "entries": entries}
+
+
+def _upload_meta_path(target):
+    return os.path.join(UPLOADS_DIR, hashlib.sha1(target.encode("utf-8", "surrogateescape")).hexdigest() + ".json")
+
+
+def _upload_target(q):
+    """Final path of an upload; creates its folders (a dropped folder keeps its tree)."""
+    folder_root, folder = _resolve(q.get("drive", "home"), q.get("path", "/"))
+    parts = [p for p in (q.get("name") or "").replace("\\", "/").split("/") if p]
+    if not parts:
+        raise HttpError(400, "Invalid name")
+    for part in parts:
+        _valid_name(part)
+    target = os.path.join(folder, *parts)
+    _makedirs_inside(folder_root, os.path.dirname(target))
+    return target
+
+
+def _int_arg(q, key, minimum=0):
+    try:
+        value = int(q.get(key, ""))
+    except ValueError:
+        raise HttpError(400, f"Invalid {key}")
+    if value < minimum:
+        raise HttpError(400, f"Invalid {key}")
+    return value
+
+
+def _remove_upload(meta_path, meta):
+    for path in (meta.get("part"), meta_path):
+        if path and (path == meta_path or path.endswith(PART_SUFFIX)):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+def _cleanup_uploads(max_age=PART_MAX_AGE):
+    """Deletes uploads nobody resumed within a day."""
+    try:
+        names = os.listdir(UPLOADS_DIR)
+    except OSError:
+        return 0
+    removed = 0
+    for name in names:
+        meta_path = os.path.join(UPLOADS_DIR, name)
+        meta = _load(meta_path, {})
+        if time.time() - meta.get("updated", 0) > max_age:
+            _remove_upload(meta_path, meta)
+            removed += 1
+    return removed
 
 
 def _info():
@@ -343,6 +405,7 @@ class WebServer:
         self.locked_until = 0
         self.last_activity = 0
         self.clients = {}
+        self.upload_locks = {}
         self.lock = threading.Lock()
 
     # ---- lifecycle
@@ -551,7 +614,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 # A page on another site cannot add this header without a CORS preflight we never accept.
                 self._drain()
                 return self._send(403, "Missing request header")
-            handler = getattr(self, f"_api_{method.lower()}_{route[5:]}", None)
+            handler = getattr(self, f"_api_{method.lower()}_{route[5:].replace('-', '_')}", None)
             if handler is None:
                 self._drain()
                 return self._send(404, "Not found")
@@ -681,32 +744,110 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     # ---- write
 
-    def _api_post_upload(self, q):
-        folder_root, folder = _resolve(q.get("drive", "home"), q.get("path", "/"))
-        parts = [p for p in (q.get("name") or "").replace("\\", "/").split("/") if p]
-        if not parts:
-            raise HttpError(400, "Invalid name")
-        for part in parts:
-            _valid_name(part)
-        target = os.path.join(folder, *parts)  # a dropped folder keeps its tree
-        _makedirs_inside(folder_root, os.path.dirname(target))
-        remaining = int(self.headers.get("Content-Length") or 0)
-        tmp = target + ".stwebsrv-part"
-        self.body_started = True
-        try:
-            with open(tmp, "wb") as f:
-                while remaining > 0:
-                    chunk = self.rfile.read(min(CHUNK, remaining))
-                    if not chunk:
-                        raise HttpError(400, "Upload interrupted")
-                    f.write(chunk)
-                    remaining -= len(chunk)
-                    self.server_ref.touch(self.client_address[0])
-            os.replace(tmp, target)
-        finally:
-            if os.path.exists(tmp):
-                os.remove(tmp)
+    def _upload_lock(self, target):
+        with self.server_ref.lock:
+            return self.server_ref.upload_locks.setdefault(target, threading.Lock())
+
+    def _api_post_upload_start(self, q):
+        """Starts an upload, or tells where to resume a matching unfinished one."""
+        target = _upload_target(q)
+        size, mtime = _int_arg(q, "size"), _int_arg(q, "mtime")
+        meta_path = _upload_meta_path(target)
+        with self._upload_lock(target):
+            meta = _load(meta_path, {})
+            part = target + PART_SUFFIX
+            same_file = (meta.get("size") == size and meta.get("mtime") == mtime and meta.get("part") == part
+                         and os.path.isfile(part) and os.path.getsize(part) == meta.get("received"))
+            if not same_file or q.get("reset") == "1":
+                free = shutil.disk_usage(os.path.dirname(target)).free
+                if size > free:
+                    raise HttpError(507, f"Not enough space: {_human(free)} free, {_human(size)} needed")
+                with open(part, "wb"):
+                    pass
+                meta = {"target": target, "part": part, "size": size, "mtime": mtime, "received": 0,
+                        "crc": 0, "last": None, "created": int(time.time())}
+            else:
+                free = shutil.disk_usage(os.path.dirname(target)).free
+                if size - meta["received"] > free:
+                    raise HttpError(507, f"Not enough space: {_human(free)} free, "
+                                         f"{_human(size - meta['received'])} needed")
+            meta["updated"] = int(time.time())
+            os.makedirs(UPLOADS_DIR, exist_ok=True)
+            _save(meta_path, meta)
+        self._json({"offset": meta["received"], "size": size, "last": meta["last"]})
+
+    def _api_post_upload_chunk(self, q):
+        """Writes one chunk at its exact offset, after checking its CRC32."""
+        target = _upload_target(q)
+        offset, expected = _int_arg(q, "offset"), _int_arg(q, "crc")
+        length = int(self.headers.get("Content-Length") or 0)
+        if length > MAX_UPLOAD_CHUNK:
+            raise HttpError(413, "Chunk too large")
+        meta_path = _upload_meta_path(target)
+        with self._upload_lock(target):
+            meta = _load(meta_path, {})
+            part = meta.get("part")
+            if not part or not os.path.isfile(part):
+                raise HttpError(410, "No upload in progress: start again")
+            if offset != meta["received"]:
+                self._drain()
+                return self._json({"error": "offset", "offset": meta["received"]}, 409)
+            if offset + length > meta["size"]:
+                raise HttpError(400, "Chunk goes past the end of the file")
+            crc, running, remaining = 0, meta["crc"], length  # this chunk's CRC, and the whole file's so far
+            self.body_started = True
+            with open(part, "r+b") as f:
+                f.seek(offset)
+                try:
+                    while remaining > 0:
+                        data = self.rfile.read(min(CHUNK, remaining))
+                        if not data:
+                            raise HttpError(400, "Chunk interrupted")
+                        f.write(data)
+                        crc = binascii.crc32(data, crc)
+                        running = binascii.crc32(data, running)
+                        remaining -= len(data)
+                        self.server_ref.touch(self.client_address[0])
+                finally:
+                    if remaining or crc != expected:
+                        f.truncate(offset)  # never keep a partial or damaged chunk
+            if crc != expected:
+                return self._json({"error": "crc", "offset": offset}, 422)
+            meta["crc"] = running
+            meta["received"] = offset + length
+            meta["last"] = {"offset": offset, "length": length, "crc": crc}
+            meta["updated"] = int(time.time())
+            _save(meta_path, meta)
+        self._json({"offset": meta["received"]})
+
+    def _api_post_upload_finish(self, q):
+        """Checks the whole file's CRC32, then gives the file its real name."""
+        target = _upload_target(q)
+        expected = _int_arg(q, "crc")
+        meta_path = _upload_meta_path(target)
+        with self._upload_lock(target):
+            meta = _load(meta_path, {})
+            part = meta.get("part")
+            if not part or not os.path.isfile(part):
+                raise HttpError(410, "No upload in progress: start again")
+            if meta["received"] != meta["size"] or os.path.getsize(part) != meta["size"]:
+                return self._json({"error": "incomplete", "offset": meta["received"]}, 409)
+            if meta["crc"] != expected:
+                _remove_upload(meta_path, meta)
+                return self._json({"error": "checksum"}, 422)
+            os.replace(part, target)
+            try:
+                os.remove(meta_path)
+            except OSError:
+                pass
         self._send(200, "Uploaded")
+
+    def _api_post_upload_cancel(self, q):
+        target = _upload_target(q)
+        meta_path = _upload_meta_path(target)
+        with self._upload_lock(target):
+            _remove_upload(meta_path, _load(meta_path, {}))
+        self._send(200, "Cancelled")
 
     def _api_post_save(self, q):
         _, full = _resolve(q.get("drive", "home"), q.get("path"))
@@ -909,6 +1050,7 @@ class Plugin:
             self.settings["password"] = _new_password()
             _save(SETTINGS_FILE, self.settings)
         self.server = WebServer(self)
+        self.last_cleanup = 0
         self.task = asyncio.get_event_loop().create_task(self._loop())
         decky.logger.info("STWebSRV %s started", CURRENT_VERSION)
 
@@ -1037,6 +1179,11 @@ class Plugin:
         while True:
             try:
                 await self._stop_if_idle()
+                if time.time() - self.last_cleanup >= 3600:
+                    self.last_cleanup = time.time()
+                    removed = await asyncio.to_thread(_cleanup_uploads)
+                    if removed:
+                        decky.logger.info("Removed %s abandoned uploads", removed)
                 if time.time() - self.last_update_check >= UPDATE_INTERVAL:
                     await self._check_update()
             except asyncio.CancelledError:

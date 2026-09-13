@@ -59,6 +59,23 @@ const L = FR
       tooLarge: "Fichier trop gros pour l'éditeur (2 Mo max). Le télécharger ?",
       failed: (m) => `Échec : ${m}`,
       uploadFailed: (n) => `${n} envoi(s) ont échoué.`,
+      uploadHint: "Fermer la page met l'envoi en pause : renvoie le même fichier pour reprendre.",
+      cancelUpload: "Annuler",
+      confirmCancel: "Annuler l'envoi ? La partie déjà envoyée du fichier en cours sera supprimée.",
+      uploadSummary: (i, n, done, total, pct) => `Fichier ${i}/${n} · ${done} / ${total} · ${pct} %`,
+      uploadSpeed: (speed, eta) => `${speed}/s${eta ? ` · ${eta} restantes` : ""}`,
+      uploadWaiting: "Préparation…",
+      remaining: (eta) => `${eta} restantes`,
+      queued: "En attente",
+      verifying: (pct) => `vérification de la partie déjà envoyée ${pct} %`,
+      retrying: (n, max) => `connexion perdue, nouvel essai ${n}/${max}…`,
+      finalizing: "vérification finale…",
+      uploadDone: "terminé",
+      cancelled: "Annulé",
+      summaryCancelled: (n, size) => `Envoi annulé · ${n} fichier(s) envoyé(s), ${size}`,
+      summaryDone: (n, size, failed) => `${n} fichier(s) envoyé(s), ${size}${failed ? ` · ${failed} échec(s)` : ""}`,
+      networkLost: "connexion perdue (renvoie le fichier pour reprendre)",
+      checksumFailed: "fichier abîmé pendant l'envoi, supprimé : recommence",
       addToSteam: "Ajouter à Steam",
       addToSteamButton: "Ajouter à Steam",
       betaTag: "bêta",
@@ -120,6 +137,23 @@ const L = FR
       tooLarge: "Too large for the editor (2 MB max). Download it instead?",
       failed: (m) => `Failed: ${m}`,
       uploadFailed: (n) => `${n} upload(s) failed.`,
+      uploadHint: "Closing the page pauses the upload: send the same file again to resume.",
+      cancelUpload: "Cancel",
+      confirmCancel: "Cancel the upload? What was already sent of the current file will be deleted.",
+      uploadSummary: (i, n, done, total, pct) => `File ${i}/${n} · ${done} / ${total} · ${pct} %`,
+      uploadSpeed: (speed, eta) => `${speed}/s${eta ? ` · ${eta} left` : ""}`,
+      uploadWaiting: "Preparing…",
+      remaining: (eta) => `${eta} left`,
+      queued: "Waiting",
+      verifying: (pct) => `checking what was already sent ${pct} %`,
+      retrying: (n, max) => `connection lost, retry ${n}/${max}…`,
+      finalizing: "final check…",
+      uploadDone: "done",
+      cancelled: "Cancelled",
+      summaryCancelled: (n, size) => `Upload cancelled · ${n} file(s) sent, ${size}`,
+      summaryDone: (n, size, failed) => `${n} file(s) sent, ${size}${failed ? ` · ${failed} failed` : ""}`,
+      networkLost: "connection lost (send the file again to resume)",
+      checksumFailed: "file damaged in transit, deleted: try again",
       addToSteam: "Add to Steam",
       addToSteamButton: "Add to Steam",
       betaTag: "beta",
@@ -263,14 +297,15 @@ function parentPath(path) {
 }
 
 function humanSize(bytes) {
-  const units = ["B", "KB", "MB", "GB", "TB"];
+  const units = FR ? ["o", "Ko", "Mo", "Go", "To"] : ["B", "KB", "MB", "GB", "TB"];
   let n = bytes;
   let unit = 0;
   while (n >= 1024 && unit < units.length - 1) {
     n /= 1024;
     unit++;
   }
-  return unit === 0 ? `${n} B` : `${n.toFixed(1)} ${units[unit]}`;
+  const text = unit === 0 ? `${Math.round(n)} ${units[0]}` : `${n.toFixed(1)} ${units[unit]}`;
+  return FR ? text.replace(".", ",") : text;
 }
 
 function stringToId(str) {
@@ -492,9 +527,110 @@ async function fetchSystemInfo() {
 
 // ------------------------------------------------------------------ uploads
 
+const UPLOAD_CHUNK = 8 * 1024 * 1024; // bytes per request
+const MAX_ATTEMPTS = 8; // per chunk, with a growing pause between attempts
+
 const _queueUpload = [];
 let _runningUpload = false;
 let _uploadFailures = 0;
+let _cancelUpload = false;
+let _currentXhr = null;
+
+// Totals of the whole batch, for the summary line.
+const Transfer = { total: 0, done: 0, doneFiles: 0, sent: 0, files: 0, index: 0, samples: [] };
+
+class Resync extends Error {}
+class Cancelled extends Error {}
+
+// CRC32, the same checksum as Python's binascii.crc32 (and ZIP, PNG, Ethernet).
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes, previous = 0) {
+  let c = (previous ^ 0xffffffff) >>> 0;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+async function readSlice(file, start, end) {
+  return new Uint8Array(await file.slice(start, end).arrayBuffer());
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatDuration(seconds) {
+  if (!isFinite(seconds) || seconds <= 0) return "";
+  seconds = Math.round(seconds);
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h) return `${h} h ${String(m).padStart(2, "0")} min`;
+  if (m) return `${m} min ${String(s).padStart(2, "0")} s`;
+  return `${s} s`;
+}
+
+/** Bytes per second over the last 5 seconds of actual sending. */
+function currentSpeed() {
+  const now = performance.now();
+  Transfer.samples.push([now, Transfer.sent]);
+  while (Transfer.samples.length > 2 && now - Transfer.samples[0][0] > 5000) Transfer.samples.shift();
+  const [t0, b0] = Transfer.samples[0];
+  return now > t0 ? ((Transfer.sent - b0) * 1000) / (now - t0) : 0;
+}
+
+let _lastRender = 0;
+function renderTransfer(item, force = false) {
+  const now = performance.now();
+  if (!force && now - _lastRender < 250) return;
+  _lastRender = now;
+  const speed = currentSpeed();
+  const done = Transfer.done + (item ? item.progress : 0);
+  const left = Math.max(Transfer.total - done, 0);
+  const pct = Transfer.total ? Math.floor((done / Transfer.total) * 100) : 100;
+  const summary = $(".dialog.upload .upload-summary");
+  const eta = speed > 0 ? formatDuration(left / speed) : "";
+  summary.innerHTML = "";
+  const line = document.createElement("div");
+  line.textContent = L.uploadSummary(Transfer.index, Transfer.files, humanSize(done), humanSize(Transfer.total), pct);
+  const line2 = document.createElement("div");
+  line2.textContent = speed > 0 ? L.uploadSpeed(humanSize(speed), eta) : L.uploadWaiting;
+  const bar = document.createElement("div");
+  bar.className = "summary-bar";
+  const fill = document.createElement("div");
+  fill.style.width = pct + "%";
+  bar.appendChild(fill);
+  summary.append(line, line2, bar);
+
+  if (!item) return;
+  const row = document.getElementById(item.id);
+  if (!row) return;
+  const size = item.file.size;
+  const filePct = size ? Math.floor((item.progress / size) * 100) : 100;
+  row.querySelector(".bar").style.width = filePct + "%";
+  let stats = `${humanSize(item.progress)} / ${humanSize(size)} · ${filePct} %`;
+  if (item.status) stats += ` · ${item.status}`;
+  else if (speed > 0) {
+    const fileEta = formatDuration((size - item.progress) / speed);
+    stats += ` · ${humanSize(speed)}/s${fileEta ? " · " + L.remaining(fileEta) : ""}`;
+  }
+  row.querySelector(".upload-stats").textContent = stats;
+}
+
+function setRowState(item, text, className) {
+  const row = document.getElementById(item.id);
+  if (!row) return;
+  row.querySelector(".upload-stats").textContent = text;
+  if (className) row.classList.add(className);
+}
 
 function queueFiles(items) {
   // items: [{ file, name }] where name may contain sub-folders
@@ -505,14 +641,23 @@ function queueFiles(items) {
 
   Dialog.show("upload");
   const body = $(".dialog.upload .dialog-body");
+  if (!_runningUpload) {
+    body.innerHTML = ""; // rows left over from a previous batch with errors
+    $(".act-cancel-upload").classList.remove("closing");
+    $(".act-cancel-upload").textContent = L.cancelUpload;
+  }
   for (const item of items) {
     const progress = T.uploadLoading();
     const id = stringToId(item.name);
+    progress.querySelector(".upload-loading").setAttribute("id", id);
     progress.querySelector(".upload-name").textContent = item.name;
-    progress.querySelector(".bar").setAttribute("id", id);
+    progress.querySelector(".upload-stats").textContent = `${L.queued} · ${humanSize(item.file.size)}`;
     body.appendChild(progress);
-    _queueUpload.push({ ...item, id, drive: currentDrive, folder: currentPath });
+    _queueUpload.push({ ...item, id, drive: currentDrive, folder: currentPath, progress: 0, status: "" });
+    Transfer.total += item.file.size;
+    Transfer.files += 1;
   }
+  renderTransfer(null, true);
   if (!_runningUpload) uploadNext();
 }
 
@@ -531,52 +676,248 @@ async function readDroppedEntry(entry, out) {
   }
 }
 
-function uploadOne(item) {
+/** POST without a body; returns { status, body } and never throws on HTTP errors. */
+async function uploadCall(route, params) {
+  let res;
+  try {
+    res = await fetch(apiUrl(route, params), { method: "POST", credentials: "same-origin", headers: { "X-STWebSRV": "1" } });
+  } catch (error) {
+    throw new Resync("network");
+  }
+  if (res.status === 401) {
+    handleAuthError();
+    throw new Error("Unauthorized");
+  }
+  const text = await res.text();
+  let body = {};
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = { error: text };
+  }
+  return { status: res.status, body };
+}
+
+function sendChunk(item, offset, bytes, crc) {
   return new Promise((resolve, reject) => {
+    const params = { drive: item.drive, path: item.folder, name: item.name, offset, crc };
     const req = new XMLHttpRequest();
-    req.open("POST", apiUrl("upload", { drive: item.drive, path: item.folder, name: item.name }), true);
+    _currentXhr = req;
+    let reported = 0;
+    req.open("POST", apiUrl("upload-chunk", params), true);
     req.setRequestHeader("X-STWebSRV", "1");
     req.setRequestHeader("Content-Type", "application/octet-stream");
+    req.timeout = 180000;
     req.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        const bar = document.getElementById(item.id);
-        if (bar) bar.style.width = Math.round((e.loaded / e.total) * 100) + "%";
-      }
+      Transfer.sent += e.loaded - reported;
+      reported = e.loaded;
+      item.progress = offset + e.loaded;
+      renderTransfer(item);
+    };
+    const settle = () => {
+      Transfer.sent -= reported; // counted again once the chunk is accepted
+      _currentXhr = null;
     };
     req.onload = () => {
-      if (req.status === 401) {
-        handleAuthError();
-        reject(new Error("Unauthorized"));
-      } else if (req.status >= 200 && req.status < 300) resolve();
-      else reject(new Error(req.responseText || `HTTP ${req.status}`));
+      settle();
+      let body = {};
+      try {
+        body = JSON.parse(req.responseText);
+      } catch {
+        body = { error: req.responseText };
+      }
+      resolve({ status: req.status, body, sent: bytes.length });
     };
-    req.onerror = () => reject(new Error("Network error"));
-    req.onabort = () => reject(new Error("Aborted"));
-    req.send(item.file);
+    req.onerror = req.ontimeout = () => {
+      settle();
+      reject(new Resync("network"));
+    };
+    req.onabort = () => {
+      settle();
+      reject(new Cancelled());
+    };
+    req.send(bytes);
   });
+}
+
+/**
+ * One attempt at sending a file from wherever the server stands.
+ * `known` maps chunk boundaries to the CRC32 of the file up to there, so a
+ * resync after a network error does not re-read what was already checked.
+ */
+async function uploadPass(item, known) {
+  const file = item.file;
+  const base = { drive: item.drive, path: item.folder, name: item.name };
+  let start = await uploadCall("upload-start", { ...base, size: file.size, mtime: file.lastModified });
+  if (start.status !== 200) throw new Error(start.body.error || `HTTP ${start.status}`);
+
+  let offset = start.body.offset;
+  let crc = 0;
+  if (offset > 0) {
+    // Same name, size and date: check the last chunk the server kept against this file.
+    const last = start.body.last;
+    const lastOk =
+      last && last.offset + last.length === offset && crc32(await readSlice(file, last.offset, offset)) === last.crc;
+    if (!lastOk) {
+      start = await uploadCall("upload-start", { ...base, size: file.size, mtime: file.lastModified, reset: "1" });
+      if (start.status !== 200) throw new Error(start.body.error || `HTTP ${start.status}`);
+      offset = 0;
+    } else {
+      // Whole-file CRC up to the resume point, from the closest boundary already computed.
+      let from = 0;
+      for (const boundary of known.keys()) if (boundary <= offset && boundary > from) from = boundary;
+      crc = known.get(from) || 0;
+      for (let pos = from; pos < offset; pos += UPLOAD_CHUNK) {
+        if (_cancelUpload) throw new Cancelled();
+        const end = Math.min(pos + UPLOAD_CHUNK, offset);
+        crc = crc32(await readSlice(file, pos, end), crc);
+        known.set(end, crc);
+        item.status = L.verifying(Math.floor((end / offset) * 100));
+        item.progress = offset;
+        renderTransfer(item);
+      }
+      item.status = "";
+    }
+  }
+  known.set(offset, crc);
+  item.progress = offset;
+
+  while (offset < file.size) {
+    if (_cancelUpload) throw new Cancelled();
+    const end = Math.min(offset + UPLOAD_CHUNK, file.size);
+    const bytes = await readSlice(file, offset, end);
+    const chunkCrc = crc32(bytes);
+    let attempts = 0;
+    for (;;) {
+      // A network error throws Resync: uploadItem waits, then asks the server where it stands.
+      const result = await sendChunk(item, offset, bytes, chunkCrc);
+      if (result.status === 200) {
+        item.failures = 0;
+        break;
+      }
+      if (result.status === 422 && result.body.error === "crc") {
+        attempts++; // damaged on the way: send the same chunk again
+        if (attempts >= MAX_ATTEMPTS) throw new Error(L.checksumFailed);
+        continue;
+      }
+      if (result.status === 409 || result.status === 410) throw new Resync("offset");
+      throw new Error(result.body.error || `HTTP ${result.status}`);
+    }
+    crc = crc32(bytes, crc);
+    offset = end;
+    known.set(offset, crc);
+    Transfer.sent += bytes.length;
+    item.progress = offset;
+    renderTransfer(item);
+  }
+
+  item.status = L.finalizing;
+  renderTransfer(item, true);
+  const finish = await uploadCall("upload-finish", { ...base, crc });
+  item.status = "";
+  if (finish.status === 200) return;
+  if (finish.status === 422) throw new Error(L.checksumFailed);
+  if (finish.status === 409 || finish.status === 410) throw new Resync("finish");
+  throw new Error(finish.body.error || `HTTP ${finish.status}`);
+}
+
+async function uploadItem(item) {
+  const known = new Map([[0, 0]]);
+  item.failures = 0;
+  let stalled = 0; // resyncs in a row without progress
+  for (;;) {
+    const before = item.progress;
+    try {
+      return await uploadPass(item, known);
+    } catch (error) {
+      if (!(error instanceof Resync)) throw error;
+      stalled = item.progress > before ? 0 : stalled + 1;
+      if (error.message === "network") {
+        // Consecutive failures only: any chunk that gets through resets the count.
+        item.failures += 1;
+        if (item.failures >= MAX_ATTEMPTS) throw new Error(L.networkLost);
+        item.status = L.retrying(item.failures, MAX_ATTEMPTS);
+        renderTransfer(item, true);
+        await sleep(Math.min(1000 * 2 ** item.failures, 30000));
+        item.status = "";
+        if (_cancelUpload) throw new Cancelled();
+      } else if (stalled >= MAX_ATTEMPTS) {
+        throw new Error(L.networkLost);
+      }
+    }
+  }
 }
 
 async function uploadNext() {
   _runningUpload = true;
+  _cancelUpload = false;
+  Transfer.samples = [];
   while (_queueUpload.length) {
     const item = _queueUpload.shift();
+    Transfer.index += 1;
     try {
-      await uploadOne(item);
+      await uploadItem(item);
+      item.progress = item.file.size;
+      Transfer.done += item.file.size;
+      Transfer.doneFiles += 1;
+      setRowState(item, `✓ ${humanSize(item.file.size)} · ${L.uploadDone}`, "done");
+      document.getElementById(item.id)?.querySelector(".bar")?.style.setProperty("width", "100%");
     } catch (error) {
+      if (error instanceof Cancelled || _cancelUpload) {
+        await uploadCall("upload-cancel", { drive: item.drive, path: item.folder, name: item.name }).catch(() => {});
+        setRowState(item, L.cancelled, "failed");
+        for (const rest of _queueUpload.splice(0)) setRowState(rest, L.cancelled, "failed");
+        break;
+      }
       _uploadFailures++;
-      const bar = document.getElementById(item.id);
-      if (bar) bar.parentElement.classList.add("failed");
+      Transfer.total -= item.file.size;
+      setRowState(item, `✗ ${error.message}`, "failed");
       console.error("Upload failed", item.name, error);
     }
+    renderTransfer(null, true);
   }
+  const cancelled = _cancelUpload;
+  const summary = $(".dialog.upload .upload-summary");
+  summary.textContent = cancelled
+    ? L.summaryCancelled(Transfer.doneFiles, humanSize(Transfer.done))
+    : L.summaryDone(Transfer.doneFiles, humanSize(Transfer.done), _uploadFailures);
   _runningUpload = false;
-  $(".dialog.upload .dialog-body").innerHTML = "";
-  Dialog.hide();
-  if (_uploadFailures) alert(L.uploadFailed(_uploadFailures));
+  _cancelUpload = false;
+  const failures = _uploadFailures;
   _uploadFailures = 0;
+  Object.assign(Transfer, { total: 0, done: 0, doneFiles: 0, sent: 0, files: 0, index: 0, samples: [] });
+  if (failures || cancelled) {
+    // Leave the list visible so the errors can be read; closing it is manual.
+    $(".act-cancel-upload").textContent = L.close;
+    $(".act-cancel-upload").classList.add("closing");
+    if (failures) alert(L.uploadFailed(failures));
+  } else {
+    $(".dialog.upload .dialog-body").innerHTML = "";
+    Dialog.hide();
+  }
   fetchSystemInfo().catch(console.error);
   fetchFiles(currentDrive, currentPath);
 }
+
+$(".act-cancel-upload").addEventListener("click", () => {
+  const button = $(".act-cancel-upload");
+  if (button.classList.contains("closing")) {
+    button.classList.remove("closing");
+    button.textContent = L.cancelUpload;
+    $(".dialog.upload .dialog-body").innerHTML = "";
+    Dialog.hide();
+    return;
+  }
+  if (!_runningUpload || !confirm(L.confirmCancel)) return;
+  _cancelUpload = true;
+  _currentXhr?.abort();
+});
+
+window.addEventListener("beforeunload", (e) => {
+  if (!_runningUpload) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
 
 window.ondragenter = (e) => {
   if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files")) {

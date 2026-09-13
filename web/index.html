@@ -268,13 +268,19 @@
       </table>
       <div class="upload-loading">
         <span class="upload-name"></span>
+        <span class="upload-stats"></span>
         <div class="bar"></div>
       </div>
     </template>
     <div class="dialog-background hidden">
       <div class="dialog upload hidden">
         <div class="dialog-head" data-i18n="uploading">Uploading</div>
+        <div class="upload-summary"></div>
         <div class="dialog-body"></div>
+        <div class="dialog-footer">
+          <span class="upload-hint" data-i18n="uploadHint">Closing the page pauses the upload: send the same file again to resume.</span>
+          <button class="btn-action act-cancel-upload" data-i18n="cancelUpload">Cancel</button>
+        </div>
       </div>
       <div class="dialog info hidden">
         <div class="dialog-head">STWebSRV — Steam Web Server</div>

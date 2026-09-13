@@ -291,7 +291,7 @@ svg > path {
 }
 .dialog.upload {
   width: 100%;
-  max-width: 420px;
+  max-width: 560px;
   max-height: calc(100vh - 20px);
   display: flex;
   flex-direction: column;
@@ -302,7 +302,7 @@ svg > path {
   max-height: calc(100vh - 60px);
 }
 .dialog.upload .upload-loading {
-  width: 350px;
+  width: 100%;
   border: 1px solid var(--color);
   margin-bottom: 5px;
   position: relative;
@@ -324,6 +324,47 @@ svg > path {
   z-index: 2;
   position: relative;
   font-weight: bold;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dialog.upload .upload-loading .upload-stats {
+  z-index: 2;
+  position: relative;
+  display: block;
+  font-size: 11px;
+  opacity: 0.9;
+}
+.dialog.upload .upload-loading.done {
+  opacity: 0.6;
+}
+.dialog.upload .upload-summary {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color);
+  font-weight: bold;
+  line-height: 1.5;
+}
+.dialog.upload .upload-summary .summary-bar {
+  height: 4px;
+  margin-top: 5px;
+  background: var(--light-color);
+}
+.dialog.upload .upload-summary .summary-bar div {
+  height: 100%;
+  width: 0;
+  background: var(--color);
+}
+.dialog.upload .dialog-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+.dialog.upload .upload-hint {
+  flex: 1;
+  font-size: 11px;
+  opacity: 0.75;
 }
 .hidden {
   display: none !important;
