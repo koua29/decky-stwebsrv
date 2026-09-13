@@ -1,155 +1,157 @@
-<p align="center"><img src="assets/stwebsrv-banner.png" alt="STWebSRV — Steam Web Server, plugin Decky pour SteamOS" width="100%"></p>
+<p align="center"><img src="assets/stwebsrv-banner.png" alt="STWebSRV — Steam Web Server, Decky plugin for SteamOS" width="100%"></p>
+
+<p align="center"><b>English</b> · <a href="README.fr.md">Français</a></p>
 
 # STWebSRV — Steam Web Server
 
-Plugin **[Decky Loader](https://decky.xyz/)** pour **SteamOS** (Steam Deck, Lenovo Legion Go S / Go 2, Steam Machine…). Un interrupteur dans le menu d'accès rapide lance un **gestionnaire de fichiers web** sur la console : depuis le navigateur de ton téléphone ou de ton ordinateur, tu parcours, télécharges, envoies, renommes, supprimes et modifies les fichiers de la console, sans passer en mode bureau ni installer de client SFTP.
+**[Decky Loader](https://decky.xyz/)** plugin for **SteamOS** (Steam Deck, Lenovo Legion Go S / Go 2, Steam Machine…). A toggle in the Quick Access Menu starts a **web file manager** on the console: from the browser of your phone or computer, you browse, download, upload, rename, delete and edit the console's files, without switching to Desktop Mode or installing an SFTP client.
 
-La page web est adaptée de la **WebUI du firmware [Bruce](https://github.com/BruceDevices/firmware)** (LilyGO, M5Stack…), dont elle garde l'apparence et l'éditeur.
+The web page is adapted from the **WebUI of the [Bruce](https://github.com/BruceDevices/firmware) firmware** (LilyGO, M5Stack…), and keeps its look and its editor.
 
-## 📸 Aperçu
+## 📸 Preview
 
-<p align="center"><img src="docs/screenshot-device.jpg" alt="Le panneau STWebSRV dans le menu Decky : serveur activé, adresse, QR code, identifiant et mot de passe" width="45%"></p>
+<p align="center"><img src="docs/screenshot-device.jpg" alt="The STWebSRV panel in the Decky menu: server on, address, QR code, username and password" width="45%"></p>
 
-<p align="center"><em>Le panneau Decky sur une Lenovo Legion Go 2 (SteamOS) : on active le serveur, on scanne le QR code.</em></p>
+<p align="center"><em>The Decky panel on a Lenovo Legion Go 2 (SteamOS): turn the server on, scan the QR code.</em></p>
 
 <p align="center">
-  <img src="docs/screenshot-login.png" alt="Page de connexion de STWebSRV" width="40%">
+  <img src="docs/screenshot-login.png" alt="STWebSRV login page" width="40%">
   &nbsp;
-  <img src="docs/screenshot-files.png" alt="L'explorateur de fichiers de STWebSRV dans un navigateur : dossier personnel, carte SD, raccourcis" width="56%">
+  <img src="docs/screenshot-files.png" alt="The STWebSRV file explorer in a browser: home folder, SD card, shortcuts" width="56%">
 </p>
 
-<p align="center"><em>La page de connexion et l'explorateur, ouverts depuis un ordinateur du réseau.</em></p>
+<p align="center"><em>The login page and the explorer, opened from a computer on the network (French browser).</em></p>
 
-## ✨ Fonctions
+## ✨ Features
 
-### Dans le menu Decky
+### In the Decky menu
 
-- **Serveur web à la demande** : un interrupteur pour le démarrer ou l'arrêter.
-- **Adresse et QR code** : l'adresse à ouvrir (`http://<ip-de-la-console>:8088`) et un QR code à scanner avec le téléphone. Si le port 8088 est pris, le serveur prend le suivant libre.
-- **Identifiant et mot de passe** affichés dans le panneau : `deck` et un mot de passe aléatoire de 8 caractères, créé à la première utilisation et conservé ensuite.
-- **Changement de mot de passe** : le bouton « Nouveau mot de passe » en génère un autre et **déconnecte immédiatement toutes les sessions ouvertes**.
-- **Visiteurs récents** : les adresses IP connectées dans les 5 dernières minutes.
-- **Arrêt automatique** : après 5, 15, 30 ou 60 minutes sans activité (15 par défaut), ou jamais. Un transfert en cours compte comme de l'activité. Une notification prévient de l'arrêt.
-- **Thème de la page web** au choix : **Steam** (bleu, par défaut), **Bruce** (rose, les couleurs d'origine) ou **Hacker** (vert).
-- **Notifications** désactivables.
+- **Web server on demand**: one toggle to start or stop it.
+- **Address and QR code**: the address to open (`http://<console-ip>:8088`) and a QR code to scan with your phone. If port 8088 is taken, the server uses the next free one.
+- **Username and password** shown in the panel: `deck` and a random 8-character password, created on first use and kept afterwards.
+- **Password change**: the "New password" button generates another one and **immediately logs out every open session**.
+- **Recent visitors**: the IP addresses connected in the last 5 minutes.
+- **Automatic stop**: after 5, 15, 30 or 60 minutes without activity (15 by default), or never. A running transfer counts as activity. A notification tells you when it stops.
+- **Web page theme** of your choice: **Steam** (blue, default), **Bruce** (pink, the original colors) or **Hacker** (green).
+- **Notifications** can be turned off.
 
-### Dans le navigateur
+### In the browser
 
-- **Page de connexion** avec le logo, identifiant prérempli.
-- **Disques** : le dossier personnel, et chaque **carte SD ou clé USB** montée, avec l'espace utilisé et la capacité.
-- **Raccourcis** vers les dossiers utiles de SteamOS, affichés seulement s'ils existent : Téléchargements, Bureau, ROMs et BIOS (EmuDeck), Steam, préfixes Proton, applis Flatpak.
-- **Fil d'Ariane cliquable** et bouton d'actualisation ; l'adresse de la page suit le dossier ouvert (retour arrière du navigateur, favoris).
-- **Envoi** de fichiers ou d'un **dossier entier avec son arborescence**, par bouton ou **glisser-déposer**, avec une barre de progression par fichier et **sans limite de taille**. Confirmation avant de remplacer un fichier existant.
-- **Téléchargement** d'un fichier (reprise possible grâce aux requêtes partielles) ou d'un **dossier entier en .zip**, fabriqué à la volée.
-- **Éditeur de texte** intégré, repris de Bruce : numéros de ligne, indentation avec Tab / Maj+Tab, fermeture automatique des parenthèses et guillemets, commentaires avec Ctrl+/ ou Ctrl+#, **enregistrement avec Ctrl+S**, alerte si on ferme sans enregistrer. Idéal pour les fichiers de configuration (`.ini`, `.cfg`, `.json`, `.conf`…).
-- **Aperçu** des images, vidéos et fichiers audio dans la page.
-- **Renommer, supprimer** (avec confirmation), **créer un fichier ou un dossier**.
-- Page **utilisable sur téléphone** et sur ordinateur.
-- **Français ou anglais**, selon la langue du navigateur (et celle de Steam pour le panneau).
+- **Login page** with the logo, username prefilled.
+- **Drives**: the home folder, and every mounted **SD card or USB drive**, with used space and capacity.
+- **Shortcuts** to useful SteamOS folders, shown only when they exist: Downloads, Desktop, ROMs and BIOS (EmuDeck), Steam, Proton prefixes, Flatpak apps.
+- **Clickable breadcrumb** and refresh button; the page address follows the open folder (browser back button, bookmarks).
+- **Upload** files or a **whole folder with its tree**, with a button or **drag and drop**, with a progress bar per file and **no size limit**. Confirmation before replacing an existing file.
+- **Download** a file (resumable thanks to range requests) or a **whole folder as a .zip**, built on the fly.
+- Built-in **text editor**, taken from Bruce: line numbers, indent with Tab / Shift+Tab, automatic closing of brackets and quotes, comments with Ctrl+/ or Ctrl+#, **save with Ctrl+S**, warning when closing without saving. Handy for config files (`.ini`, `.cfg`, `.json`, `.conf`…).
+- **Preview** of images, videos and audio files in the page.
+- **Rename, delete** (with confirmation), **create a file or a folder**.
+- Page **usable on phones** and computers.
+- **English or French**, following the browser's language (and Steam's language for the panel).
 
-### Mises à jour
+### Updates
 
-- Vérification **automatique une fois par jour** sur GitHub, et bouton **Vérifier les mises à jour**.
-- **Installation en un clic** depuis le panneau, avec vérification de l'empreinte SHA-256 par Decky.
-- **Canal bêta** optionnel pour recevoir les versions de test en avance, et **retour à la version stable** en un clic.
+- **Automatic check once a day** on GitHub, and a **Check for updates** button.
+- **One-click install** from the panel, with the SHA-256 checksum verified by Decky.
+- Optional **beta channel** to get test versions early, and a one-click **return to the stable version**.
 
 ## 📥 Installation
 
-Prérequis : une console sous SteamOS avec [Decky Loader](https://decky.xyz/) installé.
+Requirement: a SteamOS console with [Decky Loader](https://decky.xyz/) installed.
 
-### Depuis la console, par URL (le plus simple)
+### From the console, by URL (easiest)
 
-1. Decky → ⚙️ Paramètres → Général → activer le **Mode développeur**.
-2. Decky → ⚙️ → **Développeur** → **Installer un plugin depuis une URL**, puis coller :
+1. Decky → ⚙️ Settings → General → turn on **Developer mode**.
+2. Decky → ⚙️ → **Developer** → **Install plugin from URL**, then paste:
    ```
    https://github.com/koua29/decky-stwebsrv/releases/latest/download/STWebSRV.zip
    ```
-3. Valider : **STWebSRV** apparaît dans la liste des plugins Decky.
+3. Confirm: **STWebSRV** shows up in the Decky plugin list.
 
-### Avec le fichier ZIP
+### With the ZIP file
 
-Télécharger `STWebSRV.zip` depuis la page [Releases](https://github.com/koua29/decky-stwebsrv/releases), puis Decky → ⚙️ → Développeur → **Installer un plugin depuis un fichier ZIP**.
+Download `STWebSRV.zip` from the [Releases](https://github.com/koua29/decky-stwebsrv/releases) page, then Decky → ⚙️ → Developer → **Install plugin from ZIP file**.
 
-## 🚀 Utilisation
+## 🚀 Usage
 
-1. Ouvre **STWebSRV** dans le menu Decky et active **Serveur web**.
-2. Scanne le QR code avec ton téléphone, ou tape l'adresse affichée (par exemple `http://192.168.1.20:8088`) dans un navigateur connecté au **même réseau**.
-3. Connecte-toi avec l'identifiant et le mot de passe affichés dans le panneau.
-4. Quand tu as fini, désactive le serveur (ou laisse l'arrêt automatique s'en charger).
+1. Open **STWebSRV** in the Decky menu and turn on **Web server**.
+2. Scan the QR code with your phone, or type the address shown (for example `http://192.168.1.20:8088`) in a browser connected to the **same network**.
+3. Log in with the username and password shown in the panel.
+4. When you are done, turn the server off (or let the automatic stop do it).
 
-## 🔒 Sécurité
+## 🔒 Security
 
-- Le serveur ne tourne **que quand tu l'actives**, et s'arrête tout seul après la durée d'inactivité choisie ou quand le plugin se décharge.
-- Il tourne avec les droits de l'utilisateur de la console (`deck`), **jamais en root** : les fichiers système restent inaccessibles.
-- Chaque chemin est vérifié côté serveur : **impossible de sortir du disque choisi**, même par un lien symbolique. Supprimer ou renommer un lien agit sur le lien, jamais sur sa cible.
-- **Protection contre les essais de mot de passe** : après 5 erreurs, la connexion est bloquée 30 secondes, et chaque échec est ralenti.
-- Les modifications exigent la session (cookie `HttpOnly`, `SameSite=Strict`) et un en-tête propre à la page, ce qui bloque les requêtes forgées depuis un autre site. Les fichiers ouverts dans le navigateur sont servis dans un bac à sable (un fichier HTML envoyé ne peut rien exécuter).
-- Le mot de passe est rangé dans `~/homebrew/settings/STWebSRV/settings.json`, lisible par le seul utilisateur.
-- La connexion est en **HTTP simple** sur le réseau local, comme la WebUI de Bruce : n'active le serveur que sur un réseau de confiance (ton Wi-Fi à la maison, pas celui d'un hôtel).
+- The server **only runs when you turn it on**, and stops by itself after the chosen idle time or when the plugin unloads.
+- It runs with the console user's rights (`deck`), **never as root**: system files stay out of reach.
+- Every path is checked on the server: **you cannot leave the chosen drive**, not even through a symbolic link. Deleting or renaming a link acts on the link, never on its target.
+- **Password guessing protection**: after 5 wrong attempts, login is blocked for 30 seconds, and every failure is slowed down.
+- Changes require the session (`HttpOnly`, `SameSite=Strict` cookie) and a header specific to the page, which blocks requests forged from another site. Files opened in the browser are served in a sandbox (an uploaded HTML file cannot run anything).
+- The password is stored in `~/homebrew/settings/STWebSRV/settings.json`, readable by that user only.
+- The connection is **plain HTTP** on the local network, like Bruce's WebUI: only turn the server on over a network you trust (your home Wi-Fi, not a hotel's).
 
-## 🔄 Mises à jour
+## 🔄 Updates
 
-STWebSRV vérifie une fois par jour s'il existe une nouvelle version sur GitHub. Si c'est le cas, une notification s'affiche et le panneau propose **Mettre à jour** : Decky ouvre sa fenêtre de confirmation habituelle, vérifie l'empreinte SHA-256 du zip, puis recharge le plugin. Les réglages (dont le mot de passe) sont rangés hors du dossier du plugin, dans `~/homebrew/settings/STWebSRV/`, et ne sont pas touchés.
+STWebSRV checks once a day whether a new version is available on GitHub. When there is one, a notification shows up and the panel offers **Update to X.Y.Z**: Decky opens its usual confirmation window, checks the zip's SHA-256 checksum, then reloads the plugin. Settings (including the password) are stored outside the plugin folder, in `~/homebrew/settings/STWebSRV/`, and are left untouched.
 
-Tu peux aussi vérifier à la main (**Vérifier les mises à jour**, en bas du panneau), ou réinstaller par l'URL ci-dessus, qui pointe toujours vers la dernière version stable.
+You can also check by hand (**Check for updates**, at the bottom of the panel), or reinstall from the URL above, which always points to the latest stable version.
 
-Chaque version est publiée dans les [Releases](https://github.com/koua29/decky-stwebsrv/releases) avec un tag `vX.Y.Z` et la liste des nouveautés.
+Each version is published in the [Releases](https://github.com/koua29/decky-stwebsrv/releases) with a `vX.Y.Z` tag and its changelog (in French).
 
-### Versions bêta
+### Beta versions
 
-Options → **Versions bêta** fait aussi regarder les versions de test (tags `vX.Y.Z-beta.N`, publiées en *pre-release* sur GitHub). Elles arrivent plus tôt et peuvent être instables ; sans cette option, STWebSRV ne propose que les versions stables. Une bêta installée active l'option d'elle-même.
+Options → **Beta versions** also looks at test versions (`vX.Y.Z-beta.N` tags, published as *pre-releases* on GitHub). They come earlier and may be unstable; without this option, STWebSRV only offers stable versions. An installed beta turns the option on by itself.
 
-En repassant l'option sur off alors qu'une bêta est installée, le panneau propose de **revenir à la dernière version stable**.
+Turning the option off while a beta is installed makes the panel offer to **go back to the latest stable version**.
 
-**Statut** : projet jeune (0.x). En cas de souci, les journaux sont dans `~/homebrew/logs/STWebSRV/` : ouvre une [issue](https://github.com/koua29/decky-stwebsrv/issues) avec leur contenu.
+**Status**: young project (0.x). If something goes wrong, the logs are in `~/homebrew/logs/STWebSRV/`: open an [issue](https://github.com/koua29/decky-stwebsrv/issues) with their content.
 
-## 🛠️ Développement
+## 🛠️ Development
 
 ```bash
 npm install
 ./package.sh
 ```
 
-`package.sh` compile le panneau et produit `out/STWebSRV.zip` : un dossier `STWebSRV/` avec `dist/`, `web/`, `main.py`, `plugin.json`, `package.json`, `LICENSE` et `README.md`.
+`package.sh` builds the panel and produces `out/STWebSRV.zip`: a `STWebSRV/` folder with `dist/`, `web/`, `main.py`, `plugin.json`, `package.json`, `LICENSE` and `README.md`.
 
-- `main.py` : serveur HTTP (bibliothèque standard Python, dans un thread), sessions, opérations sur les fichiers, vérification des mises à jour.
-- `web/` : la page web (HTML, CSS, JavaScript sans dépendance).
-- `src/` : le panneau Decky (React), avec le QR code généré par [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT).
+- `main.py`: HTTP server (Python standard library, in a thread), sessions, file operations, update checks.
+- `web/`: the web page (HTML, CSS, JavaScript with no dependency).
+- `src/`: the Decky panel (React), with the QR code generated by [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT).
 
-## 🎮 Accessoires SteamOS
+## 🎮 SteamOS accessories
 
-*Liens partenaires Amazon : si vous achetez via ces liens, le projet touche une petite commission, sans surcoût pour vous. Des accessoires pour les machines SteamOS sur lesquelles STWebSRV s'installe.*
+*Amazon affiliate links (amazon.fr): if you buy through these links, the project earns a small commission at no extra cost to you. Accessories for the SteamOS machines STWebSRV runs on.*
 
 <table>
 <tr>
 <td align="center" width="33%">
   <a href="https://www.amazon.fr/dp/B0C349WPZG?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0C349WPZG.jpg" width="200" alt="Steam Deck Docking Station"></a><br>
-  <b><a href="https://www.amazon.fr/dp/B0C349WPZG?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">Steam Deck Docking Station</a></b><br><sub>Le dock officiel de Valve : écran, réseau filaire, USB</sub>
+  <b><a href="https://www.amazon.fr/dp/B0C349WPZG?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">Steam Deck Docking Station</a></b><br><sub>Valve's official dock: display, wired network, USB</sub>
 </td>
 <td align="center" width="33%">
-  <a href="https://www.amazon.fr/dp/B0HG8VBXSK?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0HG8VBXSK.jpg" width="200" alt="Housse Steam Machine"></a><br>
-  <b><a href="https://www.amazon.fr/dp/B0HG8VBXSK?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">Housse Steam Machine</a></b><br><sub>Protège la Steam Machine de la poussière</sub>
+  <a href="https://www.amazon.fr/dp/B0HG8VBXSK?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0HG8VBXSK.jpg" width="200" alt="Steam Machine dust cover"></a><br>
+  <b><a href="https://www.amazon.fr/dp/B0HG8VBXSK?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">Steam Machine dust cover</a></b><br><sub>Keeps dust off the Steam Machine</sub>
 </td>
 <td align="center" width="33%">
   <a href="https://www.amazon.fr/dp/B0H2JS25Y3?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0H2JS25Y3.jpg" width="200" alt="Steam Controller"></a><br>
-  <b><a href="https://www.amazon.fr/dp/B0H2JS25Y3?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">Steam Controller</a></b><br><sub>La manette de Valve, pour PC, Steam Deck et Steam Machine</sub>
+  <b><a href="https://www.amazon.fr/dp/B0H2JS25Y3?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">Steam Controller</a></b><br><sub>Valve's controller, for PC, Steam Deck and Steam Machine</sub>
 </td>
 </tr>
 </table>
 
-<sub>En tant que Partenaire Amazon, je réalise un bénéfice sur les achats remplissant les conditions requises. · As an Amazon Associate I earn from qualifying purchases.</sub>
+<sub>As an Amazon Associate I earn from qualifying purchases. · En tant que Partenaire Amazon, je réalise un bénéfice sur les achats remplissant les conditions requises.</sub>
 
-## ☕ Offrez-moi un café
+## ☕ Buy me a coffee
 
-Ce projet est gratuit et open source. S'il vous est utile, vous pouvez me remercier
-en m'offrant un café — il suffit de scanner ce QR code PayPal. Merci beaucoup ! 🙏
+This project is free and open source. If it helps you, you can say thanks
+by buying me a coffee — just scan this PayPal QR code. Thank you very much! 🙏
 
 <p align="center">
-  <img src="docs/paypal-qr.png" alt="QR code PayPal pour offrir un café" width="220" />
+  <img src="docs/paypal-qr.png" alt="PayPal QR code to buy me a coffee" width="220" />
 </p>
 
-## 📜 Licence et crédits
+## 📜 License and credits
 
-**AGPL-3.0** — voir [LICENSE](LICENSE). La page web reprend le code de la WebUI de [Bruce](https://github.com/BruceDevices/firmware) (AGPL-3.0, interface web de [lshaf](https://github.com/lshaf)) : merci à eux.
+**AGPL-3.0** — see [LICENSE](LICENSE). The web page reuses the code of the WebUI of [Bruce](https://github.com/BruceDevices/firmware) (AGPL-3.0, web interface by [lshaf](https://github.com/lshaf)): thanks to them.
 
-Projet non officiel, non affilié à Valve ni à Lenovo. Steam, SteamOS, Steam Deck et Steam Machine sont des marques de Valve Corporation.
+Unofficial project, not affiliated with Valve or Lenovo. Steam, SteamOS, Steam Deck and Steam Machine are trademarks of Valve Corporation.
