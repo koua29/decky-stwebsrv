@@ -133,8 +133,8 @@ npm install
   <b><a href="https://www.amazon.fr/dp/B0HG8VBXSK?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">Housse Steam Machine</a></b><br><sub>Protège la Steam Machine de la poussière</sub>
 </td>
 <td align="center" width="33%">
-  <a href="https://www.amazon.fr/dp/B0H2JS25Y3?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0H2JS25Y3.jpg" width="200" alt="Steam Controller"></a><br>
-  <b><a href="https://www.amazon.fr/dp/B0H2JS25Y3?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">Steam Controller</a></b><br><sub>La manette de Valve, pour PC, Steam Deck et Steam Machine</sub>
+  <a href="https://www.amazon.fr/dp/B0DCWCGSLV?th=1&amp;linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0DCWCGSLV.jpg" width="200" alt="SanDisk Extreme Go 512 Go"></a><br>
+  <b><a href="https://www.amazon.fr/dp/B0DCWCGSLV?th=1&amp;linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">SanDisk Extreme Go 512 Go</a></b><br><sub>Carte microSD : de la place pour les fichiers envoyés</sub>
 </td>
 </tr>
 </table>
