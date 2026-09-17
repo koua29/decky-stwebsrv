@@ -125,16 +125,16 @@ npm install
 <table>
 <tr>
 <td align="center" width="33%">
-  <a href="https://www.amazon.fr/dp/B0C349WPZG?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0C349WPZG.jpg" width="200" alt="Steam Deck Docking Station"></a><br>
-  <b><a href="https://www.amazon.fr/dp/B0C349WPZG?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">Steam Deck Docking Station</a></b><br><sub>Le dock officiel de Valve : écran, réseau filaire, USB</sub>
+  <a href="https://www.amazon.com/dp/B0B7HVZNMB?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0B7HVZNMB.jpg" width="200" alt="JSAUX 6-in-1 docking station"></a><br>
+  <b><a href="https://www.amazon.com/dp/B0B7HVZNMB?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl">JSAUX 6-in-1 docking station</a></b><br><sub>Écran, réseau filaire et USB pour le Deck</sub>
 </td>
 <td align="center" width="33%">
-  <a href="https://www.amazon.fr/dp/B0HG8VBXSK?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0HG8VBXSK.jpg" width="200" alt="Housse Steam Machine"></a><br>
-  <b><a href="https://www.amazon.fr/dp/B0HG8VBXSK?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">Housse Steam Machine</a></b><br><sub>Protège la Steam Machine de la poussière</sub>
+  <a href="https://www.amazon.com/dp/B07P7M6K35?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B07P7M6K35.jpg" width="200" alt="SanDisk Extreme 512 GB microSD"></a><br>
+  <b><a href="https://www.amazon.com/dp/B07P7M6K35?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl">SanDisk Extreme 512 GB microSD</a></b><br><sub>De la place pour les fichiers envoyés</sub>
 </td>
 <td align="center" width="33%">
-  <a href="https://www.amazon.fr/dp/B0DCWCGSLV?th=1&amp;linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0DCWCGSLV.jpg" width="200" alt="SanDisk Extreme Go 512 Go"></a><br>
-  <b><a href="https://www.amazon.fr/dp/B0DCWCGSLV?th=1&amp;linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">SanDisk Extreme Go 512 Go</a></b><br><sub>Carte microSD : de la place pour les fichiers envoyés</sub>
+  <a href="https://www.amazon.com/dp/B0874YJP92?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0874YJP92.jpg" width="200" alt="Samsung T7 1 TB portable SSD"></a><br>
+  <b><a href="https://www.amazon.com/dp/B0874YJP92?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl">Samsung T7 1 TB portable SSD</a></b><br><sub>Disque externe pour les gros transferts</sub>
 </td>
 </tr>
 </table>
