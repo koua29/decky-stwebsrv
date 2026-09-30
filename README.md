@@ -126,21 +126,21 @@ npm install
 
 ## 🎮 SteamOS accessories
 
-*Amazon affiliate links (amazon.fr): if you buy through these links, the project earns a small commission at no extra cost to you. Accessories for the SteamOS machines STWebSRV runs on.*
+*Amazon affiliate links (amazon.com): if you buy through these links, the project earns a small commission at no extra cost to you. Accessories for the SteamOS machines STWebSRV runs on.*
 
 <table>
 <tr>
 <td align="center" width="33%">
-  <a href="https://www.amazon.fr/dp/B0C349WPZG?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0C349WPZG.jpg" width="200" alt="Steam Deck Docking Station"></a><br>
-  <b><a href="https://www.amazon.fr/dp/B0C349WPZG?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">Steam Deck Docking Station</a></b><br><sub>Valve's official dock: display, wired network, USB</sub>
+  <a href="https://www.amazon.com/dp/B0B7HVZNMB?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0B7HVZNMB.jpg" width="200" alt="JSAUX 6-in-1 docking station"></a><br>
+  <b><a href="https://www.amazon.com/dp/B0B7HVZNMB?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl">JSAUX 6-in-1 docking station</a></b><br><sub>Display, wired network and USB for the Deck</sub>
 </td>
 <td align="center" width="33%">
-  <a href="https://www.amazon.fr/dp/B0HG8VBXSK?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0HG8VBXSK.jpg" width="200" alt="Steam Machine dust cover"></a><br>
-  <b><a href="https://www.amazon.fr/dp/B0HG8VBXSK?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">Steam Machine dust cover</a></b><br><sub>Keeps dust off the Steam Machine</sub>
+  <a href="https://www.amazon.com/dp/B07P7M6K35?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B07P7M6K35.jpg" width="200" alt="SanDisk Extreme 512 GB microSD"></a><br>
+  <b><a href="https://www.amazon.com/dp/B07P7M6K35?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl">SanDisk Extreme 512 GB microSD</a></b><br><sub>Room for the files you send</sub>
 </td>
 <td align="center" width="33%">
-  <a href="https://www.amazon.fr/dp/B0DCWCGSLV?th=1&amp;linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0DCWCGSLV.jpg" width="200" alt="SanDisk Extreme Go 512 GB"></a><br>
-  <b><a href="https://www.amazon.fr/dp/B0DCWCGSLV?th=1&amp;linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">SanDisk Extreme Go 512 GB</a></b><br><sub>microSD card: room for the files you send</sub>
+  <a href="https://www.amazon.com/dp/B0874YJP92?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0874YJP92.jpg" width="200" alt="Samsung T7 1 TB portable SSD"></a><br>
+  <b><a href="https://www.amazon.com/dp/B0874YJP92?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl">Samsung T7 1 TB portable SSD</a></b><br><sub>External drive for the big transfers</sub>
 </td>
 </tr>
 </table>
