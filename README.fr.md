@@ -131,16 +131,16 @@ npm install
 <table>
 <tr>
 <td align="center" width="33%">
-  <a href="https://www.amazon.com/dp/B0B7HVZNMB?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0B7HVZNMB.jpg" width="200" alt="JSAUX 6-in-1 docking station"></a><br>
-  <b><a href="https://www.amazon.com/dp/B0B7HVZNMB?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl">JSAUX 6-in-1 docking station</a></b><br><sub>Écran, réseau filaire et USB pour le Deck</sub>
+  <a href="https://www.amazon.fr/dp/B0DWSJVLQF?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0DWSJVLQF.jpg" width="200" alt="Station d'accueil JSAUX 6-en-1"></a><br>
+  <b><a href="https://www.amazon.fr/dp/B0DWSJVLQF?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">Station d'accueil JSAUX 6-en-1</a></b><br><sub>Écran, réseau filaire et USB pour le Deck</sub>
 </td>
 <td align="center" width="33%">
-  <a href="https://www.amazon.com/dp/B07P7M6K35?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B07P7M6K35.jpg" width="200" alt="SanDisk Extreme 512 GB microSD"></a><br>
-  <b><a href="https://www.amazon.com/dp/B07P7M6K35?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl">SanDisk Extreme 512 GB microSD</a></b><br><sub>De la place pour les fichiers envoyés</sub>
+  <a href="https://www.amazon.fr/dp/B07P7M6K35?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B07P7M6K35.jpg" width="200" alt="SanDisk Extreme 512 Go microSD"></a><br>
+  <b><a href="https://www.amazon.fr/dp/B07P7M6K35?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">SanDisk Extreme 512 Go microSD</a></b><br><sub>De la place pour les fichiers envoyés</sub>
 </td>
 <td align="center" width="33%">
-  <a href="https://www.amazon.com/dp/B0874YJP92?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B0874YJP92.jpg" width="200" alt="Samsung T7 1 TB portable SSD"></a><br>
-  <b><a href="https://www.amazon.com/dp/B0874YJP92?linkCode=ll2&amp;tag=koua29-20&amp;ref_=as_li_ss_tl">Samsung T7 1 TB portable SSD</a></b><br><sub>Disque externe pour les gros transferts</sub>
+  <a href="https://www.amazon.fr/dp/B087DFLF9S?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl"><img src="assets/amazon-B087DFLF9S.jpg" width="200" alt="SSD externe Samsung T7 1 To"></a><br>
+  <b><a href="https://www.amazon.fr/dp/B087DFLF9S?linkCode=ll2&amp;tag=koua29-21&amp;ref_=as_li_ss_tl">SSD externe Samsung T7 1 To</a></b><br><sub>Disque externe pour les gros transferts</sub>
 </td>
 </tr>
 </table>
