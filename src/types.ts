@@ -6,6 +6,15 @@ export interface Settings {
   notify: boolean;
   language: string;
   beta: boolean;
+  address: string;
+}
+
+export interface Address {
+  iface: string;
+  ip: string;
+  kind: "ethernet" | "wifi" | "other";
+  default: boolean;
+  url: string;
 }
 
 export interface Update {
@@ -26,6 +35,7 @@ export interface State {
   running: boolean;
   port: number;
   urls: string[];
+  addresses: Address[];
   hostname: string;
   user: string;
   password: string;

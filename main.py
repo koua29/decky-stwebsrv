@@ -9,6 +9,8 @@ The server runs in a background thread with the plugin's own rights (the
 Decky user, not root), and every path is kept inside the chosen drive.
 """
 import asyncio
+import binascii
+import hashlib
 import http.server
 import json
 import os
@@ -17,6 +19,7 @@ import secrets
 import shutil
 import socket
 import ssl
+import stat
 import subprocess
 import threading
 import time
@@ -61,9 +64,30 @@ THEMES = {
 }
 PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no 0/o, 1/l/i
 
+# Files the web page can add to Steam as non-Steam games (beta).
+LAUNCH_EXT = {
+    "windows": [".exe", ".bat", ".cmd", ".msi"],             # run through Proton
+    "native": [".sh", ".appimage", ".x86_64", ".x86", ".run"],
+}
+SHORTCUT_TIMEOUT = 20  # seconds the web request waits for Steam's answer
+
+# steam_appid.txt tells a Steamworks game its App ID when Steam did not start it (beta).
+APPID_FILE = "steam_appid.txt"
+APPID_RE = re.compile(r"[1-9][0-9]{0,9}")
+STORE_API = "https://store.steampowered.com/api"
+STORE_CACHE_SECONDS = 3600
+
+# Resumable uploads: the page sends a file in chunks, each checked by CRC32.
+PART_SUFFIX = ".stwebsrv-part"
+MAX_UPLOAD_CHUNK = 64 * 1024 * 1024
+PART_MAX_AGE = 24 * 3600      # abandoned uploads are cleaned after a day
+UPLOADS_DIR = os.path.join(getattr(decky, "DECKY_PLUGIN_RUNTIME_DIR", decky.DECKY_PLUGIN_SETTINGS_DIR), "uploads")
+
 DEFAULT_SETTINGS = {"port": DEFAULT_PORT, "user": "deck", "password": "", "idle_minutes": 15,
-                    "theme": "steam", "notify": True, "language": "en", "beta": IS_PRERELEASE}
+                    "theme": "steam", "notify": True, "language": "en", "beta": IS_PRERELEASE,
+                    "address": "auto"}
 SETTINGS_FILE = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "settings.json")
+SHORTCUTS_FILE = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "shortcuts.json")
 
 
 # --------------------------------------------------------------------------- storage
@@ -90,33 +114,69 @@ def _new_password():
 
 # --------------------------------------------------------------------------- network
 
-_ips_cache = (0.0, [])
+_addr_cache = (0.0, [])
+KIND_ORDER = {"ethernet": 0, "wifi": 1, "other": 2}
 
 
-def _lan_ips():
-    """IPv4 addresses other devices can reach, the default route's first (cached 15 s)."""
-    global _ips_cache
-    if time.time() - _ips_cache[0] < 15:
-        return _ips_cache[1]
-    ips = []
+def _iface_kind(name):
+    """'ethernet', 'wifi' or 'other' (bridges, containers, VPN tunnels), read from sysfs."""
+    base = f"/sys/class/net/{name}"
+    if os.path.isdir(base + "/wireless") or os.path.exists(base + "/phy80211"):
+        return "wifi"
+    try:
+        with open(base + "/type", encoding="ascii") as f:
+            arp_type = f.read().strip()
+        physical = os.path.exists(base + "/device")
+    except OSError:  # no sysfs: guess from the usual names
+        return "ethernet" if name.startswith(("en", "eth")) else "wifi" if name.startswith("wl") else "other"
+    return "ethernet" if arp_type == "1" and physical else "other"  # USB dock adapters count as ethernet
+
+
+def _default_route_ip():
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("10.255.255.255", 1))  # no packet is sent
-            ips.append(s.getsockname()[0])
+            s.connect(("10.255.255.255", 1))  # no packet is sent: only picks the source address
+            return s.getsockname()[0]
     except OSError:
-        pass
+        return ""
+
+
+def _parse_ip_addr(output):
+    """(interface, address) pairs from `ip -4 -o addr show scope global`."""
+    return re.findall(r"^\d+:\s+([^\s:@]+)[^\n]*?\binet (\d+\.\d+\.\d+\.\d+)/", output, re.M)
+
+
+def _addresses():
+    """Reachable IPv4 addresses, wired first, then Wi-Fi, then the rest (cached 15 s).
+
+    The server listens on all of them; this only decides which one the panel shows.
+    """
+    global _addr_cache
+    if time.time() - _addr_cache[0] < 15:
+        return _addr_cache[1]
+    default_ip = _default_route_ip()
     try:
-        out = subprocess.run(["ip", "-4", "-o", "addr", "show", "scope", "global"],
-                             capture_output=True, text=True, timeout=3).stdout
-        ips += re.findall(r"inet (\d+\.\d+\.\d+\.\d+)/", out)
+        output = subprocess.run(["ip", "-4", "-o", "addr", "show", "scope", "global"],
+                                capture_output=True, text=True, timeout=3).stdout
     except (OSError, subprocess.SubprocessError):
-        pass
-    seen = []
-    for ip in ips:
-        if ip not in seen and not ip.startswith("127."):
-            seen.append(ip)
-    _ips_cache = (time.time(), seen)
-    return seen
+        output = ""
+    found = []
+    for iface, ip in _parse_ip_addr(output):
+        if ip.startswith("127.") or any(a["ip"] == ip for a in found):
+            continue
+        found.append({"iface": iface, "ip": ip, "kind": _iface_kind(iface), "default": ip == default_ip})
+    if default_ip and not default_ip.startswith("127.") and not any(a["ip"] == default_ip for a in found):
+        found.append({"iface": "", "ip": default_ip, "kind": "other", "default": True})
+    found.sort(key=lambda a: (KIND_ORDER[a["kind"]], not a["default"]))
+    _addr_cache = (time.time(), found)
+    return found
+
+
+def _ordered_addresses(preferred):
+    """The chosen interface first when it is connected, the automatic order otherwise."""
+    addresses = list(_addresses())
+    chosen = [a for a in addresses if preferred != "auto" and a["iface"] == preferred]
+    return chosen + [a for a in addresses if a not in chosen]
 
 
 # --------------------------------------------------------------------------- drives
@@ -221,6 +281,15 @@ def _valid_name(name):
     return name
 
 
+def _launch_kind(path):
+    """'windows', 'native' or None: how Steam would run this file."""
+    lower = path.lower()
+    for kind, extensions in LAUNCH_EXT.items():
+        if lower.endswith(tuple(extensions)):
+            return kind
+    return None
+
+
 def _makedirs_inside(root, directory):
     """os.makedirs, refusing to create anything through a link that leaves the drive."""
     existing = directory
@@ -240,6 +309,8 @@ def _list(drive_id, rel):
     entries = []
     with os.scandir(full) as it:
         for entry in it:
+            if entry.name.endswith(PART_SUFFIX):  # unfinished uploads stay out of sight
+                continue
             try:
                 is_dir = entry.is_dir()  # follows links, like a file manager
                 try:
@@ -260,6 +331,58 @@ def _list(drive_id, rel):
     return {"drive": drive_id, "path": "/" if path == "/." else path, "entries": entries}
 
 
+def _upload_meta_path(target):
+    return os.path.join(UPLOADS_DIR, hashlib.sha1(target.encode("utf-8", "surrogateescape")).hexdigest() + ".json")
+
+
+def _upload_target(q):
+    """Final path of an upload; creates its folders (a dropped folder keeps its tree)."""
+    folder_root, folder = _resolve(q.get("drive", "home"), q.get("path", "/"))
+    parts = [p for p in (q.get("name") or "").replace("\\", "/").split("/") if p]
+    if not parts:
+        raise HttpError(400, "Invalid name")
+    for part in parts:
+        _valid_name(part)
+    target = os.path.join(folder, *parts)
+    _makedirs_inside(folder_root, os.path.dirname(target))
+    return target
+
+
+def _int_arg(q, key, minimum=0):
+    try:
+        value = int(q.get(key, ""))
+    except ValueError:
+        raise HttpError(400, f"Invalid {key}")
+    if value < minimum:
+        raise HttpError(400, f"Invalid {key}")
+    return value
+
+
+def _remove_upload(meta_path, meta):
+    for path in (meta.get("part"), meta_path):
+        if path and (path == meta_path or path.endswith(PART_SUFFIX)):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+def _cleanup_uploads(max_age=PART_MAX_AGE):
+    """Deletes uploads nobody resumed within a day."""
+    try:
+        names = os.listdir(UPLOADS_DIR)
+    except OSError:
+        return 0
+    removed = 0
+    for name in names:
+        meta_path = os.path.join(UPLOADS_DIR, name)
+        meta = _load(meta_path, {})
+        if time.time() - meta.get("updated", 0) > max_age:
+            _remove_upload(meta_path, meta)
+            removed += 1
+    return removed
+
+
 def _info():
     drives = []
     for d in _drives():
@@ -270,7 +393,7 @@ def _info():
             used = total = 0
         drives.append({"id": d["id"], "label": d["label"], "used": _human(used), "total": _human(total)})
     return {"version": CURRENT_VERSION, "hostname": socket.gethostname(),
-            "drives": drives, "shortcuts": _shortcuts()}
+            "drives": drives, "shortcuts": _shortcuts(), "launch_ext": LAUNCH_EXT}
 
 
 # --------------------------------------------------------------------------- web server
@@ -288,6 +411,7 @@ class WebServer:
         self.locked_until = 0
         self.last_activity = 0
         self.clients = {}
+        self.upload_locks = {}
         self.lock = threading.Lock()
 
     # ---- lifecycle
@@ -496,7 +620,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 # A page on another site cannot add this header without a CORS preflight we never accept.
                 self._drain()
                 return self._send(403, "Missing request header")
-            handler = getattr(self, f"_api_{method.lower()}_{route[5:]}", None)
+            handler = getattr(self, f"_api_{method.lower()}_{route[5:].replace('-', '_')}", None)
             if handler is None:
                 self._drain()
                 return self._send(404, "Not found")
@@ -626,32 +750,110 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     # ---- write
 
-    def _api_post_upload(self, q):
-        folder_root, folder = _resolve(q.get("drive", "home"), q.get("path", "/"))
-        parts = [p for p in (q.get("name") or "").replace("\\", "/").split("/") if p]
-        if not parts:
-            raise HttpError(400, "Invalid name")
-        for part in parts:
-            _valid_name(part)
-        target = os.path.join(folder, *parts)  # a dropped folder keeps its tree
-        _makedirs_inside(folder_root, os.path.dirname(target))
-        remaining = int(self.headers.get("Content-Length") or 0)
-        tmp = target + ".stwebsrv-part"
-        self.body_started = True
-        try:
-            with open(tmp, "wb") as f:
-                while remaining > 0:
-                    chunk = self.rfile.read(min(CHUNK, remaining))
-                    if not chunk:
-                        raise HttpError(400, "Upload interrupted")
-                    f.write(chunk)
-                    remaining -= len(chunk)
-                    self.server_ref.touch(self.client_address[0])
-            os.replace(tmp, target)
-        finally:
-            if os.path.exists(tmp):
-                os.remove(tmp)
+    def _upload_lock(self, target):
+        with self.server_ref.lock:
+            return self.server_ref.upload_locks.setdefault(target, threading.Lock())
+
+    def _api_post_upload_start(self, q):
+        """Starts an upload, or tells where to resume a matching unfinished one."""
+        target = _upload_target(q)
+        size, mtime = _int_arg(q, "size"), _int_arg(q, "mtime")
+        meta_path = _upload_meta_path(target)
+        with self._upload_lock(target):
+            meta = _load(meta_path, {})
+            part = target + PART_SUFFIX
+            same_file = (meta.get("size") == size and meta.get("mtime") == mtime and meta.get("part") == part
+                         and os.path.isfile(part) and os.path.getsize(part) == meta.get("received"))
+            if not same_file or q.get("reset") == "1":
+                free = shutil.disk_usage(os.path.dirname(target)).free
+                if size > free:
+                    raise HttpError(507, f"Not enough space: {_human(free)} free, {_human(size)} needed")
+                with open(part, "wb"):
+                    pass
+                meta = {"target": target, "part": part, "size": size, "mtime": mtime, "received": 0,
+                        "crc": 0, "last": None, "created": int(time.time())}
+            else:
+                free = shutil.disk_usage(os.path.dirname(target)).free
+                if size - meta["received"] > free:
+                    raise HttpError(507, f"Not enough space: {_human(free)} free, "
+                                         f"{_human(size - meta['received'])} needed")
+            meta["updated"] = int(time.time())
+            os.makedirs(UPLOADS_DIR, exist_ok=True)
+            _save(meta_path, meta)
+        self._json({"offset": meta["received"], "size": size, "last": meta["last"]})
+
+    def _api_post_upload_chunk(self, q):
+        """Writes one chunk at its exact offset, after checking its CRC32."""
+        target = _upload_target(q)
+        offset, expected = _int_arg(q, "offset"), _int_arg(q, "crc")
+        length = int(self.headers.get("Content-Length") or 0)
+        if length > MAX_UPLOAD_CHUNK:
+            raise HttpError(413, "Chunk too large")
+        meta_path = _upload_meta_path(target)
+        with self._upload_lock(target):
+            meta = _load(meta_path, {})
+            part = meta.get("part")
+            if not part or not os.path.isfile(part):
+                raise HttpError(410, "No upload in progress: start again")
+            if offset != meta["received"]:
+                self._drain()
+                return self._json({"error": "offset", "offset": meta["received"]}, 409)
+            if offset + length > meta["size"]:
+                raise HttpError(400, "Chunk goes past the end of the file")
+            crc, running, remaining = 0, meta["crc"], length  # this chunk's CRC, and the whole file's so far
+            self.body_started = True
+            with open(part, "r+b") as f:
+                f.seek(offset)
+                try:
+                    while remaining > 0:
+                        data = self.rfile.read(min(CHUNK, remaining))
+                        if not data:
+                            raise HttpError(400, "Chunk interrupted")
+                        f.write(data)
+                        crc = binascii.crc32(data, crc)
+                        running = binascii.crc32(data, running)
+                        remaining -= len(data)
+                        self.server_ref.touch(self.client_address[0])
+                finally:
+                    if remaining or crc != expected:
+                        f.truncate(offset)  # never keep a partial or damaged chunk
+            if crc != expected:
+                return self._json({"error": "crc", "offset": offset}, 422)
+            meta["crc"] = running
+            meta["received"] = offset + length
+            meta["last"] = {"offset": offset, "length": length, "crc": crc}
+            meta["updated"] = int(time.time())
+            _save(meta_path, meta)
+        self._json({"offset": meta["received"]})
+
+    def _api_post_upload_finish(self, q):
+        """Checks the whole file's CRC32, then gives the file its real name."""
+        target = _upload_target(q)
+        expected = _int_arg(q, "crc")
+        meta_path = _upload_meta_path(target)
+        with self._upload_lock(target):
+            meta = _load(meta_path, {})
+            part = meta.get("part")
+            if not part or not os.path.isfile(part):
+                raise HttpError(410, "No upload in progress: start again")
+            if meta["received"] != meta["size"] or os.path.getsize(part) != meta["size"]:
+                return self._json({"error": "incomplete", "offset": meta["received"]}, 409)
+            if meta["crc"] != expected:
+                _remove_upload(meta_path, meta)
+                return self._json({"error": "checksum"}, 422)
+            os.replace(part, target)
+            try:
+                os.remove(meta_path)
+            except OSError:
+                pass
         self._send(200, "Uploaded")
+
+    def _api_post_upload_cancel(self, q):
+        target = _upload_target(q)
+        meta_path = _upload_meta_path(target)
+        with self._upload_lock(target):
+            _remove_upload(meta_path, _load(meta_path, {}))
+        self._send(200, "Cancelled")
 
     def _api_post_save(self, q):
         _, full = _resolve(q.get("drive", "home"), q.get("path"))
@@ -706,6 +908,87 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         else:
             raise HttpError(404, "Not found")
         self._send(200, "Deleted")
+
+
+    def _api_post_steam(self, q):
+        """Adds the file to Steam as a non-Steam game, through the Decky panel."""
+        _, full = _resolve(q.get("drive", "home"), q.get("path"))
+        if not os.path.isfile(full):
+            raise HttpError(404, "Not a file")
+        kind = _launch_kind(full)
+        if kind is None:
+            raise HttpError(415, "Steam cannot launch this kind of file")
+        if '"' in full:
+            raise HttpError(400, "The path contains a double quote")
+        name = (q.get("name") or "").strip() or os.path.splitext(os.path.basename(full))[0]
+        options = (q.get("options") or "").strip()
+        if len(name) > 200 or len(options) > 1000 or "\x00" in name + options:
+            raise HttpError(400, "Invalid name or launch options")
+        if kind == "native":
+            mode = os.stat(full).st_mode
+            if not mode & stat.S_IXUSR:  # Steam runs the file itself: it must be executable
+                os.chmod(full, mode | stat.S_IXUSR)
+        request = {
+            "path": full,
+            "name": name,
+            "exe": f'"{full}"',  # quoted the way Steam stores shortcuts
+            "start_dir": f'"{os.path.dirname(full)}"',
+            "options": options,
+            "proton": q.get("proton", "1" if kind == "windows" else "0") == "1",
+            "force": q.get("force") == "1",
+        }
+        self._json(self.server_ref.plugin.add_steam_shortcut(request))
+
+    # ---- steam_appid.txt (beta)
+
+    def _appid_folder(self, q):
+        _, folder = _resolve(q.get("drive", "home"), q.get("path", "/"))
+        if not os.path.isdir(folder):
+            raise HttpError(404, "Not a folder")
+        return folder
+
+    def _api_get_appid(self, q):
+        path = os.path.join(self._appid_folder(q), APPID_FILE)
+        self._json({"exists": os.path.lexists(path), "id": _read_appid(path)})
+
+    def _api_post_appid(self, q):
+        """Writes the App ID in the folder's steam_appid.txt; force=1 replaces another ID."""
+        path = os.path.join(self._appid_folder(q), APPID_FILE)
+        app_id = (q.get("id") or "").strip()
+        if not APPID_RE.fullmatch(app_id):
+            raise HttpError(400, "Invalid Steam App ID")
+        if os.path.isdir(path):
+            raise HttpError(409, "steam_appid.txt is a folder")
+        current = _read_appid(path)
+        if current == app_id:
+            return self._json({"ok": True, "code": "unchanged", "id": app_id})
+        if os.path.lexists(path) and q.get("force") != "1":
+            return self._json({"ok": False, "code": "exists", "id": current})
+        tmp = path + PART_SUFFIX
+        with open(tmp, "w", encoding="ascii") as f:
+            f.write(app_id)  # just the number, as Valve's samples do
+        os.replace(tmp, path)
+        decky.logger.info("steam_appid.txt %s in %s", app_id, os.path.dirname(path))
+        self._json({"ok": True, "code": "written", "id": app_id})
+
+    def _store(self, fetch):
+        try:
+            return fetch()
+        except (OSError, ValueError) as e:  # URLError, timeouts, bad JSON
+            decky.logger.info("Steam Store: %s", e)
+            raise HttpError(502, "Steam Store unreachable")
+
+    def _api_get_steam_app(self, q):
+        app_id = (q.get("id") or "").strip()
+        if not APPID_RE.fullmatch(app_id):
+            raise HttpError(400, "Invalid Steam App ID")
+        self._json(self._store(lambda: _store_app(app_id, q.get("lang"))))
+
+    def _api_get_steam_search(self, q):
+        term = (q.get("term") or "").strip()
+        if not 2 <= len(term) <= 100:
+            raise HttpError(400, "Search needs 2 to 100 characters")
+        self._json({"items": self._store(lambda: _store_search(term, q.get("lang")))})
 
 
 class _Unseekable:
@@ -803,6 +1086,58 @@ def _latest_release(current, beta=False):
 
 # --------------------------------------------------------------------------- plugin
 
+# --------------------------------------------------------------------------- Steam Store (beta)
+
+_store_cache = {}
+
+
+def _read_appid(path):
+    """Text of an existing steam_appid.txt (first line, 32 characters max), '' if none."""
+    try:
+        with open(path, "rb") as f:
+            text = f.read(256).decode("utf-8", "replace")
+    except OSError:
+        return ""
+    return (text.strip().splitlines() or [""])[0].strip()[:32]
+
+
+def _store_json(route, params):
+    url = f"{STORE_API}/{route}?{urllib.parse.urlencode(params)}"
+    hit = _store_cache.get(url)
+    if hit and time.time() - hit[0] < STORE_CACHE_SECONDS:
+        return hit[1]
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=10, context=_SSL) as resp:
+        data = json.loads(resp.read(4 * 1024 * 1024).decode("utf-8", "replace"))
+    if len(_store_cache) > 300:
+        _store_cache.clear()
+    _store_cache[url] = (time.time(), data)
+    return data
+
+
+def _store_lang(lang):
+    return ("french", "FR") if lang == "fr" else ("english", "US")
+
+
+def _store_app(app_id, lang):
+    """Name and type of an App ID; a DLC also names its base game, whose ID the game expects."""
+    language, _ = _store_lang(lang)
+    entry = (_store_json("appdetails", {"appids": app_id, "filters": "basic", "l": language}) or {}).get(app_id) or {}
+    if not entry.get("success"):
+        return {"id": app_id, "found": False}
+    info = entry.get("data") or {}
+    full = info.get("fullgame") or {}
+    return {"id": app_id, "found": True, "name": str(info.get("name") or ""), "type": str(info.get("type") or ""),
+            "fullgame": {"id": str(full["appid"]), "name": str(full.get("name") or "")} if full.get("appid") else None}
+
+
+def _store_search(term, lang):
+    language, country = _store_lang(lang)  # storesearch returns nothing without a country
+    data = _store_json("storesearch/", {"term": term, "l": language, "cc": country}) or {}
+    return [{"id": str(item["id"]), "name": str(item.get("name") or "")}
+            for item in data.get("items") or [] if item.get("type") == "app" and item.get("id")][:10]
+
+
 class Plugin:
     settings = dict(DEFAULT_SETTINGS)
     server = None
@@ -811,13 +1146,20 @@ class Plugin:
     last_update_check = 0
     update_notified = ""
     task = None
+    loop = None
+    pending = None
+    shortcut_lock = None
 
     async def _main(self):
+        self.loop = asyncio.get_running_loop()
+        self.pending = {}
+        self.shortcut_lock = threading.Lock()
         self.settings = {**DEFAULT_SETTINGS, **_load(SETTINGS_FILE, {})}
         if not self.settings["password"]:
             self.settings["password"] = _new_password()
             _save(SETTINGS_FILE, self.settings)
         self.server = WebServer(self)
+        self.last_cleanup = 0
         self.task = asyncio.get_event_loop().create_task(self._loop())
         decky.logger.info("STWebSRV %s started", CURRENT_VERSION)
 
@@ -862,6 +1204,9 @@ class Plugin:
             self.settings[key] = "fr" if str(value) == "fr" else "en"
         elif key in ("notify", "beta"):
             self.settings[key] = bool(value)
+        elif key == "address":
+            value = str(value)
+            self.settings[key] = value if re.fullmatch(r"[A-Za-z0-9_.:-]{1,32}", value) else "auto"
         else:
             return self._snapshot()
         _save(SETTINGS_FILE, self.settings)
@@ -872,12 +1217,52 @@ class Plugin:
     async def check_update(self):
         return self.update if await self._check_update() else None
 
+    async def shortcut_result(self, request_id, result):
+        """Answer of the Decky panel to a stw_add_shortcut event."""
+        waiter = (self.pending or {}).get(request_id)
+        if waiter:
+            waiter["result"] = result if isinstance(result, dict) else {"ok": False, "code": "error"}
+            waiter["event"].set()
+
+    # ---- called from web server threads
+
+    def add_steam_shortcut(self, request):
+        """Asks the panel to create the shortcut and waits for its answer.
+
+        Only the frontend can reach SteamClient, so the request travels as an
+        event and comes back through shortcut_result. One at a time: Steam
+        misbehaves when shortcuts are created concurrently.
+        """
+        with self.shortcut_lock:
+            known = _load(SHORTCUTS_FILE, {})
+            request_id = secrets.token_hex(8)
+            waiter = {"event": threading.Event(), "result": None}
+            self.pending[request_id] = waiter
+            payload = {k: v for k, v in request.items() if k != "path"}
+            payload.update(id=request_id, existing=int((known.get(request["path"]) or {}).get("appid", 0)))
+            try:
+                asyncio.run_coroutine_threadsafe(decky.emit("stw_add_shortcut", payload), self.loop)
+                answered = waiter["event"].wait(SHORTCUT_TIMEOUT)
+            finally:
+                self.pending.pop(request_id, None)
+            if not answered:
+                return {"ok": False, "code": "no_answer"}
+            result = waiter["result"]
+            if result.get("ok") and result.get("appid"):
+                known[request["path"]] = {"appid": int(result["appid"]), "name": request["name"],
+                                          "ts": int(time.time())}
+                _save(SHORTCUTS_FILE, known)
+            decky.logger.info("Steam shortcut %s: %s", request["name"], result)
+            return {"ok": bool(result.get("ok")), "code": str(result.get("code") or ""),
+                    "appid": int(result.get("appid") or 0), "tool": str(result.get("tool") or ""),
+                    "detail": str(result.get("detail") or "")[:300], "name": request["name"]}
+
     # ---- internals
 
     def _snapshot(self):
         running = bool(self.server and self.server.running)
         port = self.server.port if running else int(self.settings["port"])
-        ips = _lan_ips() if running else []
+        addresses = _ordered_addresses(self.settings["address"]) if running else []
         idle = int(self.settings["idle_minutes"])
         stops_in = None
         if running and idle:
@@ -885,7 +1270,8 @@ class Plugin:
         return {
             "running": running,
             "port": port,
-            "urls": [f"http://{ip}:{port}" for ip in ips],
+            "urls": [f"http://{a['ip']}:{port}" for a in addresses],
+            "addresses": [{**a, "url": f"http://{a['ip']}:{port}"} for a in addresses],
             "hostname": socket.gethostname(),
             "user": self.settings["user"],
             "password": self.settings["password"],
@@ -902,6 +1288,11 @@ class Plugin:
         while True:
             try:
                 await self._stop_if_idle()
+                if time.time() - self.last_cleanup >= 3600:
+                    self.last_cleanup = time.time()
+                    removed = await asyncio.to_thread(_cleanup_uploads)
+                    if removed:
+                        decky.logger.info("Removed %s abandoned uploads", removed)
                 if time.time() - self.last_update_check >= UPDATE_INTERVAL:
                     await self._check_update()
             except asyncio.CancelledError:

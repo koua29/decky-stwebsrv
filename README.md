@@ -28,6 +28,7 @@ The web page is adapted from the **WebUI of the [Bruce](https://github.com/Bruce
 
 - **Web server on demand**: one toggle to start or stop it.
 - **Address and QR code**: the address to open (`http://<console-ip>:8088`) and a QR code to scan with your phone. If port 8088 is taken, the server uses the next free one.
+- **Several networks** (Ethernet + Wi-Fi, USB dock…): the server answers on all of them. Each address is shown with its type (Wired, Wi-Fi, Other), **wired comes first**, and the "Address shown" menu (since 0.2.0-beta.2) picks the one used for the QR code. The choice is remembered; if that adapter is unplugged, the automatic order comes back.
 - **Username and password** shown in the panel: `deck` and a random 8-character password, created on first use and kept afterwards.
 - **Password change**: the "New password" button generates another one and **immediately logs out every open session**.
 - **Recent visitors**: the IP addresses connected in the last 5 minutes.
@@ -41,11 +42,15 @@ The web page is adapted from the **WebUI of the [Bruce](https://github.com/Bruce
 - **Drives**: the home folder, and every mounted **SD card or USB drive**, with used space and capacity.
 - **Shortcuts** to useful SteamOS folders, shown only when they exist: Downloads, Desktop, ROMs and BIOS (EmuDeck), Steam, Proton prefixes, Flatpak apps.
 - **Clickable breadcrumb** and refresh button; the page address follows the open folder (browser back button, bookmarks).
-- **Upload** files or a **whole folder with its tree**, with a button or **drag and drop**, with a progress bar per file and **no size limit**. Confirmation before replacing an existing file.
+- **Upload** files or a **whole folder with its tree**, with a button or **drag and drop**, **with no size limit**. Confirmation before replacing an existing file.
+- **Resumable, verified uploads** (since 0.2.0-beta.3): the file is sent in 8 MB chunks, each checked with CRC32 and sent again if it arrives damaged. If the network drops, the upload retries by itself; if you close the page, sending the same file again resumes where it stopped (after checking the part already received). The file only gets its real name once complete and its checksum verified, so an existing file is never damaged. Free space is checked before starting, and abandoned uploads are deleted after 24 hours.
+- **Transfer progress**: for each file and for the whole batch, amount sent / total, percentage, **speed** and **time left**; **Cancel** button.
 - **Download** a file (resumable thanks to range requests) or a **whole folder as a .zip**, built on the fly.
 - Built-in **text editor**, taken from Bruce: line numbers, indent with Tab / Shift+Tab, automatic closing of brackets and quotes, comments with Ctrl+/ or Ctrl+#, **save with Ctrl+S**, warning when closing without saving. Handy for config files (`.ini`, `.cfg`, `.json`, `.conf`…).
 - **Preview** of images, videos and audio files in the page.
 - **Rename, delete** (with confirmation), **create a file or a folder**.
+- 🧪 **Add to Steam** (beta, since 0.2.0-beta.1): a ▶ button on programs (`.exe`, `.bat`, `.msi`, `.sh`, `.AppImage`…) creates a **non-Steam game shortcut** in the library, without restarting Steam. Editable name, **Proton turned on by default for Windows programs** (Proton Experimental when installed, otherwise the newest Proton), optional launch options, Linux programs made executable if needed. If the file is already in Steam, the page asks before creating a duplicate. A notification shows up on the console; tapping it opens the game's page.
+- 🧪 **steam_appid.txt** (beta, since 0.2.0-beta.4): some Steam games started from a non-Steam shortcut do not launch without this file, which gives them their Steam App ID. The "ID" button in the toolbar creates it in the open folder, and a checkbox in "Add to Steam" creates it next to the program. Type the ID, a **game name** (searched on the Steam Store) or a Store link; the game's name is shown to catch typos, and for a DLC the page offers the base game's ID. An existing file is only replaced after confirmation. Steam must be running and your account must own the game.
 - Page **usable on phones** and computers.
 - **English or French**, following the browser's language (and Steam's language for the panel).
 
@@ -86,6 +91,7 @@ Download `STWebSRV.zip` from the [Releases](https://github.com/koua29/decky-stwe
 - Every path is checked on the server: **you cannot leave the chosen drive**, not even through a symbolic link. Deleting or renaming a link acts on the link, never on its target.
 - **Password guessing protection**: after 5 wrong attempts, login is blocked for 30 seconds, and every failure is slowed down.
 - Changes require the session (`HttpOnly`, `SameSite=Strict` cookie) and a header specific to the page, which blocks requests forged from another site. Files opened in the browser are served in a sandbox (an uploaded HTML file cannot run anything).
+- **Add to Steam** launches nothing: it only creates the shortcut, which you start yourself from the library. It only works in Game Mode, with Decky running.
 - The password is stored in `~/homebrew/settings/STWebSRV/settings.json`, readable by that user only.
 - The connection is **plain HTTP** on the local network, like Bruce's WebUI: only turn the server on over a network you trust (your home Wi-Fi, not a hotel's).
 

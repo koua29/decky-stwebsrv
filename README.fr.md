@@ -28,6 +28,7 @@ La page web est adaptée de la **WebUI du firmware [Bruce](https://github.com/Br
 
 - **Serveur web à la demande** : un interrupteur pour le démarrer ou l'arrêter.
 - **Adresse et QR code** : l'adresse à ouvrir (`http://<ip-de-la-console>:8088`) et un QR code à scanner avec le téléphone. Si le port 8088 est pris, le serveur prend le suivant libre.
+- **Plusieurs réseaux** (câble + Wi-Fi, dock USB…) : le serveur répond sur tous. Chaque adresse est affichée avec son type (Câble, Wi-Fi, Autre), **le câble passe en premier**, et le menu « Adresse affichée » (à partir de la 0.2.0-beta.2) permet de choisir celle du QR code. Le choix est retenu ; si la carte choisie est débranchée, l'ordre automatique reprend.
 - **Identifiant et mot de passe** affichés dans le panneau : `deck` et un mot de passe aléatoire de 8 caractères, créé à la première utilisation et conservé ensuite.
 - **Changement de mot de passe** : le bouton « Nouveau mot de passe » en génère un autre et **déconnecte immédiatement toutes les sessions ouvertes**.
 - **Visiteurs récents** : les adresses IP connectées dans les 5 dernières minutes.
@@ -41,11 +42,15 @@ La page web est adaptée de la **WebUI du firmware [Bruce](https://github.com/Br
 - **Disques** : le dossier personnel, et chaque **carte SD ou clé USB** montée, avec l'espace utilisé et la capacité.
 - **Raccourcis** vers les dossiers utiles de SteamOS, affichés seulement s'ils existent : Téléchargements, Bureau, ROMs et BIOS (EmuDeck), Steam, préfixes Proton, applis Flatpak.
 - **Fil d'Ariane cliquable** et bouton d'actualisation ; l'adresse de la page suit le dossier ouvert (retour arrière du navigateur, favoris).
-- **Envoi** de fichiers ou d'un **dossier entier avec son arborescence**, par bouton ou **glisser-déposer**, avec une barre de progression par fichier et **sans limite de taille**. Confirmation avant de remplacer un fichier existant.
+- **Envoi** de fichiers ou d'un **dossier entier avec son arborescence**, par bouton ou **glisser-déposer**, **sans limite de taille**. Confirmation avant de remplacer un fichier existant.
+- **Envoi reprenable et vérifié** (à partir de la 0.2.0-beta.3) : le fichier part en morceaux de 8 Mo, chacun contrôlé par CRC32 et renvoyé s'il arrive abîmé. En cas de coupure réseau, l'envoi réessaie tout seul ; si tu fermes la page, renvoyer le même fichier reprend là où il s'était arrêté (après vérification de la partie déjà reçue). Le fichier ne prend son vrai nom qu'une fois complet et son empreinte vérifiée : un fichier existant n'est jamais abîmé. La place libre est contrôlée avant de commencer, et les envois abandonnés sont effacés au bout de 24 h.
+- **Suivi du transfert** : pour chaque fichier et pour l'ensemble, quantité envoyée / totale, pourcentage, **débit** et **temps restant** ; bouton **Annuler**.
 - **Téléchargement** d'un fichier (reprise possible grâce aux requêtes partielles) ou d'un **dossier entier en .zip**, fabriqué à la volée.
 - **Éditeur de texte** intégré, repris de Bruce : numéros de ligne, indentation avec Tab / Maj+Tab, fermeture automatique des parenthèses et guillemets, commentaires avec Ctrl+/ ou Ctrl+#, **enregistrement avec Ctrl+S**, alerte si on ferme sans enregistrer. Idéal pour les fichiers de configuration (`.ini`, `.cfg`, `.json`, `.conf`…).
 - **Aperçu** des images, vidéos et fichiers audio dans la page.
 - **Renommer, supprimer** (avec confirmation), **créer un fichier ou un dossier**.
+- 🧪 **Ajouter à Steam** (bêta, à partir de la 0.2.0-beta.1) : un bouton ▶ sur les programmes (`.exe`, `.bat`, `.msi`, `.sh`, `.AppImage`…) crée un **raccourci « jeu non-Steam »** dans la bibliothèque, sans redémarrer Steam. Nom modifiable, **Proton activé d'office pour les programmes Windows** (Proton Experimental s'il est installé, sinon le Proton le plus récent), options de lancement facultatives, rendu exécutable si besoin pour les programmes Linux. Si le fichier est déjà dans Steam, la page demande confirmation avant de créer un doublon. Une notification s'affiche sur la console ; un appui ouvre la fiche du jeu.
+- 🧪 **steam_appid.txt** (bêta, à partir de la 0.2.0-beta.4) : certains jeux Steam lancés en raccourci non-Steam ne démarrent pas sans ce fichier, qui leur donne leur ID Steam. Le bouton « ID » de la barre d'outils le crée dans le dossier ouvert, et une case le crée à côté du programme dans « Ajouter à Steam ». On entre l'ID, un **nom de jeu** (recherche sur le Steam Store) ou un lien du Store ; le nom du jeu s'affiche pour éviter une faute de frappe, et pour un DLC la page propose l'ID du jeu de base. Un fichier existant n'est remplacé qu'après confirmation. Steam doit être lancé et ton compte doit posséder le jeu.
 - Page **utilisable sur téléphone** et sur ordinateur.
 - **Français ou anglais**, selon la langue du navigateur (et celle de Steam pour le panneau).
 
@@ -86,6 +91,7 @@ Télécharger `STWebSRV.zip` depuis la page [Releases](https://github.com/koua29
 - Chaque chemin est vérifié côté serveur : **impossible de sortir du disque choisi**, même par un lien symbolique. Supprimer ou renommer un lien agit sur le lien, jamais sur sa cible.
 - **Protection contre les essais de mot de passe** : après 5 erreurs, la connexion est bloquée 30 secondes, et chaque échec est ralenti.
 - Les modifications exigent la session (cookie `HttpOnly`, `SameSite=Strict`) et un en-tête propre à la page, ce qui bloque les requêtes forgées depuis un autre site. Les fichiers ouverts dans le navigateur sont servis dans un bac à sable (un fichier HTML envoyé ne peut rien exécuter).
+- **Ajouter à Steam** ne lance rien : il crée seulement le raccourci, que tu démarres toi-même depuis la bibliothèque. Il ne fonctionne qu'en mode Jeu, avec Decky actif.
 - Le mot de passe est rangé dans `~/homebrew/settings/STWebSRV/settings.json`, lisible par le seul utilisateur.
 - La connexion est en **HTTP simple** sur le réseau local, comme la WebUI de Bruce : n'active le serveur que sur un réseau de confiance (ton Wi-Fi à la maison, pas celui d'un hôtel).
 

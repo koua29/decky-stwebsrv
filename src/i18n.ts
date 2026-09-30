@@ -26,6 +26,11 @@ const en = {
   starting: "Starting…",
   address: "Open on your phone or computer:",
   noNetwork: "No network address found: connect to Wi-Fi first.",
+  addressChoice: "Address shown",
+  addressChoiceHelp: "The server answers on every network; this picks the one for the QR code.",
+  addressAuto: "Automatic (cable first)",
+  kind: { ethernet: "Wired", wifi: "Wi-Fi", other: "Other" } as Record<string, string>,
+  otherAddresses: "Also reachable at:",
   login: (user: string) => `Username: ${user}`,
   password: (password: string) => `Password: ${password}`,
   newPassword: "New password",
@@ -71,6 +76,7 @@ const en = {
   toastUpdateFoundBody: "The button is at the bottom of the panel, under Check for updates.",
   toastUpdate: (version: string) => `STWebSRV ${version} is available`,
   toastUpdateBody: "Open STWebSRV in the Decky menu to install it.",
+  toastShortcutAdded: "Added to Steam from the web page",
 };
 
 const fr: typeof en = {
@@ -82,6 +88,11 @@ const fr: typeof en = {
   starting: "Démarrage…",
   address: "À ouvrir sur ton téléphone ou ton ordinateur :",
   noNetwork: "Aucune adresse réseau : connecte-toi d'abord au Wi-Fi.",
+  addressChoice: "Adresse affichée",
+  addressChoiceHelp: "Le serveur répond sur tous les réseaux ; ceci choisit celui du QR code.",
+  addressAuto: "Automatique (câble d'abord)",
+  kind: { ethernet: "Câble", wifi: "Wi-Fi", other: "Autre" },
+  otherAddresses: "Aussi joignable sur :",
   login: (user) => `Identifiant : ${user}`,
   password: (password) => `Mot de passe : ${password}`,
   newPassword: "Nouveau mot de passe",
@@ -127,6 +138,7 @@ const fr: typeof en = {
   toastUpdateFoundBody: "Le bouton est en bas du panneau, sous « Vérifier les mises à jour ».",
   toastUpdate: (version) => `Mise à jour STWebSRV ${version} disponible`,
   toastUpdateBody: "Ouvre STWebSRV dans le menu Decky pour l'installer.",
+  toastShortcutAdded: "Ajouté à Steam depuis la page web",
 };
 
 export const t = lang === "fr" ? fr : en;
