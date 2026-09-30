@@ -39,6 +39,14 @@ try:
     import zipfile
 except ImportError:
     zipfile = None
+try:
+    import ctypes
+except ImportError:
+    ctypes = None
+try:
+    import struct
+except ImportError:
+    struct = None
 
 PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
 WEB_DIR = os.path.join(PLUGIN_DIR, "web")
@@ -302,6 +310,53 @@ def _makedirs_inside(root, directory):
         raise HttpError(403, "Outside the drive")
 
 
+# Linux keeps the creation date in the inode, but Python does not expose it:
+# statx(2) is the only way to read it, so it is called through ctypes.
+_STATX_BTIME = 0x00000800
+_STATX_BTIME_OFFSET = 80    # struct statx: stx_btime.tv_sec
+_AT_FDCWD = -100
+_statx = None               # None = not looked up yet, False = unusable here
+
+
+def _statx_available():
+    """Looks up statx(2) once; False when the C library or ctypes cannot reach it."""
+    global _statx
+    if _statx is None:
+        _statx = False
+        if ctypes and struct:
+            try:
+                fn = ctypes.CDLL("libc.so.6", use_errno=True).statx
+                fn.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_uint, ctypes.c_void_p]
+                fn.restype = ctypes.c_int
+                _statx = fn
+            except (OSError, AttributeError):
+                _statx = False
+    return _statx
+
+
+def _birthtime(path, info):
+    """Creation date of a file, 0 when the filesystem or the kernel does not keep it."""
+    native = getattr(info, "st_birthtime", None)  # Python has it on macOS/BSD, not on Linux
+    if native:
+        return int(native)
+    fn = _statx_available()
+    if not fn:
+        return 0
+    buffer = ctypes.create_string_buffer(256)     # struct statx is 256 bytes
+    try:
+        if fn(_AT_FDCWD, os.fsencode(path), 0, _STATX_BTIME, buffer) != 0:
+            return 0
+        mask = struct.unpack_from("=I", buffer, 0)[0]
+        if not mask & _STATX_BTIME:               # old kernel, or a filesystem without crtime
+            return 0
+        seconds = struct.unpack_from("=q", buffer, _STATX_BTIME_OFFSET)[0]
+    except (OSError, ValueError, struct.error):
+        return 0
+    if seconds <= 0 or seconds > time.time() + 86400:  # a date in the future means a wrong read
+        return 0
+    return int(seconds)
+
+
 def _list(drive_id, rel):
     root, full = _resolve(drive_id, rel)
     if not os.path.isdir(full):
@@ -325,6 +380,7 @@ def _list(drive_id, rel):
                 "link": entry.is_symlink(),
                 "size": 0 if is_dir else info.st_size,
                 "mtime": int(info.st_mtime),
+                "btime": _birthtime(entry.path, info),
             })
     entries.sort(key=lambda e: (e["type"] != "dir", e["name"].lower()))
     path = "/" + os.path.relpath(full, root).replace(os.sep, "/")

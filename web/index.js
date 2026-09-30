@@ -25,6 +25,11 @@ const L = FR
       zipFolder: "Télécharger ce dossier en .zip",
       name: "Nom",
       size: "Taille",
+      created: "Créé le",
+      modified: "Modifié le",
+      sortHint: "Trier sur cette colonne",
+      noDate: "—",
+      noDateHint: "Ce disque ne garde pas la date de création",
       action: "Action",
       download: "Télécharger",
       downloadZip: "Télécharger en .zip",
@@ -123,6 +128,11 @@ const L = FR
       zipFolder: "Download this folder as .zip",
       name: "Name",
       size: "Size",
+      created: "Created",
+      modified: "Modified",
+      sortHint: "Sort on this column",
+      noDate: "—",
+      noDateHint: "This drive does not keep the creation date",
       action: "Action",
       download: "Download",
       downloadZip: "Download as .zip",
@@ -336,6 +346,24 @@ function parentPath(path) {
   return cut <= 0 ? "/" : path.substring(0, cut);
 }
 
+const LOCALE = FR ? "fr-FR" : "en-GB";
+const dayFormat = new Intl.DateTimeFormat(LOCALE, { year: "2-digit", month: "2-digit", day: "2-digit" });
+const timeFormat = new Intl.DateTimeFormat(LOCALE, { hour: "2-digit", minute: "2-digit" });
+
+function fillDate(cell, seconds) {
+  const day = $(".date-day", cell);
+  const time = $(".date-time", cell);
+  if (!seconds) {
+    day.textContent = L.noDate;
+    time.textContent = "";
+    return;
+  }
+  const date = new Date(seconds * 1000);
+  day.textContent = dayFormat.format(date);
+  time.textContent = timeFormat.format(date);   // hidden on a narrow screen
+  cell.title = day.textContent + " " + time.textContent;
+}
+
 function humanSize(bytes) {
   const units = FR ? ["o", "Ko", "Mo", "Go", "To"] : ["B", "KB", "MB", "GB", "TB"];
   let n = bytes;
@@ -401,6 +429,60 @@ let launchExt = { windows: [], native: [] };
 let currentDrive;
 let currentPath;
 let currentEntries = [];
+let currentListing = null;         // kept so a sort change does not ask the server again
+
+const SORT_KEYS = ["name", "size", "btime", "mtime"];
+const SORT_STORE = "stwebsrv-sort";
+const sort = { key: "name", dir: 1 };
+try {
+  const saved = JSON.parse(localStorage.getItem(SORT_STORE) || "null");
+  if (saved && SORT_KEYS.includes(saved.key)) {
+    sort.key = saved.key;
+    sort.dir = saved.dir === -1 ? -1 : 1;
+  }
+} catch (error) {
+  /* private mode, or a leftover value: the default order is fine */
+}
+
+function saveSort() {
+  try {
+    localStorage.setItem(SORT_STORE, JSON.stringify(sort));
+  } catch (error) {
+    /* nothing to do: the order simply is not remembered */
+  }
+}
+
+function sortEntries(entries) {
+  const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+  return entries.slice().sort((a, b) => {
+    if ((a.type === "dir") !== (b.type === "dir")) return a.type === "dir" ? -1 : 1;  // folders stay on top
+    let result;
+    if (sort.key === "name") result = byName(a, b);
+    else result = (a[sort.key] || 0) - (b[sort.key] || 0);
+    if (result === 0 && sort.key !== "name") result = byName(a, b);
+    return result * sort.dir;
+  });
+}
+
+function renderSortMarks() {
+  $$("table.explorer thead .act-sort").forEach((th) => {
+    const active = th.dataset.sort === sort.key;
+    th.classList.toggle("sorted", active);
+    $(".sort-mark", th).textContent = active ? (sort.dir === 1 ? " ▲" : " ▼") : "";
+  });
+}
+
+function setSort(key) {
+  if (!SORT_KEYS.includes(key)) return;
+  if (sort.key === key) sort.dir = -sort.dir;
+  else {
+    sort.key = key;
+    sort.dir = key === "name" ? 1 : -1;  // biggest and newest first: what you usually look for
+  }
+  saveSort();
+  renderSortMarks();
+  if (currentListing) renderFileRows(currentListing);
+}
 const btnRefreshFolder = $("#refresh-folder");
 
 function updateURL(drive, path) {
@@ -447,7 +529,7 @@ function messageRow(text) {
   const tr = document.createElement("tr");
   tr.className = "message-row";
   const td = document.createElement("td");
-  td.colSpan = 3;
+  td.colSpan = 5;
   td.textContent = text;
   tr.appendChild(td);
   tbody.appendChild(tr);
@@ -456,7 +538,10 @@ function messageRow(text) {
 function renderFileRows(data) {
   const tbody = $("table.explorer tbody");
   tbody.innerHTML = "";
+  currentListing = data;
   currentEntries = data.entries;
+  const entries = sortEntries(data.entries);
+  renderSortMarks();
 
   if (data.path !== "/") {
     const e = T.pathRow();
@@ -465,9 +550,9 @@ function renderFileRows(data) {
     row.setAttribute("data-path", parentPath(data.path));
     tbody.appendChild(e);
   }
-  if (data.entries.length === 0) messageRow(L.emptyFolder);
+  if (entries.length === 0) messageRow(L.emptyFolder);
 
-  for (const entry of data.entries) {
+  for (const entry of entries) {
     const e = T.fileRow();
     const row = e.querySelector(".file-row");
     const dPath = joinPath(data.path, entry.name);
@@ -486,6 +571,10 @@ function renderFileRows(data) {
     row.setAttribute("data-size", entry.size);
     e.querySelector(".act-rename").setAttribute("data-action", isDir ? "renameFolder" : "renameFile");
     e.querySelector(".col-size").textContent = isDir ? "" : humanSize(entry.size);
+    const created = e.querySelector(".col-created");
+    fillDate(created, entry.btime);
+    if (!entry.btime) created.title = L.noDateHint;
+    fillDate(e.querySelector(".col-modified"), entry.mtime);
     const download = e.querySelector(".act-download");
     download.setAttribute("href", downloadUrl(data.drive, dPath, isDir));
     download.setAttribute("download", isDir ? entry.name + ".zip" : entry.name);
@@ -1522,6 +1611,12 @@ $(".act-write-appid").addEventListener("click", async () => {
 // ------------------------------------------------------------------ clicks
 
 document.addEventListener("click", async (e) => {
+  const sortAction = e.target.closest(".act-sort");
+  if (sortAction) {
+    setSort(sortAction.dataset.sort);
+    return;
+  }
+
   const browseAction = e.target.closest(".act-browse");
   if (browseAction && !e.target.closest(".dialog")) {
     e.preventDefault();

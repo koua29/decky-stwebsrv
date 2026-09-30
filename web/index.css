@@ -174,9 +174,32 @@ svg > path {
   width: 90px;
   text-align: right;
 }
+.container .content .table .col-date {
+  width: 132px;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.container .content .table .col-date .date-time {
+  opacity: 0.75;
+  margin-left: 6px;
+}
 .container .content .table .col-action {
   width: 130px;
   text-align: right;
+}
+.container .content .table thead .act-sort {
+  cursor: pointer;
+  user-select: none;
+}
+.container .content .table thead .act-sort:hover {
+  background-color: var(--light-color);
+}
+.container .content .table thead .act-sort.sorted {
+  text-decoration: underline;
+}
+.container .content .table thead .sort-mark {
+  font-size: 11px;
 }
 .container .content .table tbody tr td {
   padding: 5px;
@@ -702,5 +725,16 @@ svg > path {
   }
   .container .content .table .col-size {
     width: 64px;
+  }
+  /* A phone screen has no room for five columns: the creation date goes away,
+     and the dates keep only the day. */
+  .container .content .table .col-created {
+    display: none;
+  }
+  .container .content .table .col-date {
+    width: 72px;
+  }
+  .container .content .table .col-date .date-time {
+    display: none;
   }
 }

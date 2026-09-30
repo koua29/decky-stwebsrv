@@ -179,8 +179,18 @@
         <table class="table explorer">
           <thead>
             <tr>
-              <th class="col-name" data-i18n="name">Name</th>
-              <th class="col-size" data-i18n="size">Size</th>
+              <th class="col-name act-sort" data-sort="name" data-i18n-title="sortHint">
+                <span data-i18n="name">Name</span><span class="sort-mark"></span>
+              </th>
+              <th class="col-size act-sort" data-sort="size" data-i18n-title="sortHint">
+                <span data-i18n="size">Size</span><span class="sort-mark"></span>
+              </th>
+              <th class="col-date col-created act-sort" data-sort="btime" data-i18n-title="sortHint">
+                <span data-i18n="created">Created</span><span class="sort-mark"></span>
+              </th>
+              <th class="col-date col-modified act-sort" data-sort="mtime" data-i18n-title="sortHint">
+                <span data-i18n="modified">Modified</span><span class="sort-mark"></span>
+              </th>
               <th class="col-action" data-i18n="action">Action</th>
             </tr>
           </thead>
@@ -191,11 +201,13 @@
     <template id="t">
       <table>
         <tr class="path-row">
-          <td colspan="3" class="act-browse">..</td>
+          <td colspan="5" class="act-browse">..</td>
         </tr>
         <tr class="file-row">
           <td class="col-name"></td>
           <td class="col-size"></td>
+          <td class="col-date col-created"><span class="date-day"></span><span class="date-time"></span></td>
+          <td class="col-date col-modified"><span class="date-day"></span><span class="date-time"></span></td>
           <td class="col-action">
             <button class="icon-action act-steam" data-i18n-title="addToSteam"><svg
                 version="1.1"
