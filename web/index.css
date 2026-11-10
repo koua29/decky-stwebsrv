@@ -74,9 +74,13 @@ svg > path {
   fill: var(--color);
 }
 .icon-action.act-download svg,
-.icon-action.act-download svg > path {
+.icon-action.act-download svg > path,
+.icon-action.act-launcher svg {
   stroke: var(--color);
   fill: transparent;
+}
+.icon-action.act-launcher:hover svg {
+  stroke: var(--background);
 }
 .icon-action:hover {
   background-color: var(--color);
@@ -185,7 +189,7 @@ svg > path {
   margin-left: 6px;
 }
 .container .content .table .col-action {
-  width: 130px;
+  width: 160px;  /* five icons: Steam, launcher, download, rename, delete */
   text-align: right;
 }
 .container .content .table thead .act-sort {
@@ -802,8 +806,11 @@ svg > path {
     min-width: 0;
     max-width: 90vw;
   }
+  /* five icons do not fit beside the name on a phone: they go on two lines */
   .container .content .table .col-action {
-    width: 118px;
+    width: 104px;
+    white-space: normal;
+    line-height: 0;
   }
   .logo {
     height: 38px;

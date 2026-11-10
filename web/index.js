@@ -554,12 +554,21 @@ function renderBreadcrumb(drive, path) {
     });
 }
 
+// A full-width cell spanning a hidden column (Created, on a phone) makes a fixed
+// table keep an empty column: span only the visible ones.
+const PHONE = window.matchMedia("(max-width: 600px)");
+function fitSpans() {
+  const span = PHONE.matches ? 4 : 5;
+  $$("table.explorer tbody td[colspan]").forEach((td) => (td.colSpan = span));
+}
+PHONE.addEventListener("change", fitSpans);
+
 function messageRow(text) {
   const tbody = $("table.explorer tbody");
   const tr = document.createElement("tr");
   tr.className = "message-row";
   const td = document.createElement("td");
-  td.colSpan = 5;
+  td.colSpan = PHONE.matches ? 4 : 5;
   td.textContent = text;
   tr.appendChild(td);
   tbody.appendChild(tr);
@@ -622,6 +631,7 @@ function renderFileRows(data) {
     }
     tbody.appendChild(e);
   }
+  fitSpans();
 }
 
 async function fetchFiles(drive, path) {
