@@ -97,7 +97,8 @@ const L = FR
         "Steam n'a pas répondu. La console doit être en mode Jeu (pas en mode Bureau), avec Decky actif.",
       steamFailed: (detail) => `Steam n'a pas pu créer le raccourci${detail ? ` : ${detail}` : "."}`,
       nativeNote: "Programme Linux : il sera rendu exécutable si besoin.",
-      launcherTitle: "Créer un script de lancement (.sh)",
+      launcherTitle: "Lancer avec des arguments",
+      launcherWindowsNote: "Programme Windows : Steam le lancera avec Proton et ces arguments (options de lancement du raccourci). Les chemins sont convertis en Z:\\…, le disque Linux vu par Proton.",
       launcherArgs: "Arguments :",
       launcherPickFile: "📄 Fichier du jeu…",
       launcherName: "Nom du script :",
@@ -213,7 +214,8 @@ const L = FR
       steamNoAnswer: "Steam did not answer. The console must be in Game Mode (not Desktop Mode), with Decky running.",
       steamFailed: (detail) => `Steam could not create the shortcut${detail ? `: ${detail}` : "."}`,
       nativeNote: "Linux program: it will be made executable if needed.",
-      launcherTitle: "Create a launch script (.sh)",
+      launcherTitle: "Launch with arguments",
+      launcherWindowsNote: "Windows program: Steam starts it with Proton and these arguments (the shortcut's launch options). Paths are turned into Z:\\…, the Linux drive as Proton sees it.",
       launcherArgs: "Arguments:",
       launcherPickFile: "📄 Game file…",
       launcherName: "Script name:",
@@ -615,7 +617,8 @@ function renderFileRows(data) {
       e.querySelector(".col-action").classList.add("type-file");
       const kind = launchKind(entry.name);
       if (kind) e.querySelector(".col-action").classList.add("launchable");
-      if (kind === "native" || (entry.exec && kind !== "windows")) e.querySelector(".col-action").classList.add("scriptable");
+      if (kind === "native" || (entry.exec && kind !== "windows") || (kind === "windows" && !/\.msi$/i.test(entry.name)))
+        e.querySelector(".col-action").classList.add("scriptable");
     }
     tbody.appendChild(e);
   }
@@ -1469,15 +1472,16 @@ const WINDOWS_OPTIONS = [
   ["PROTON_USE_WINED3D=1 %command%", "old DirectX"], ["PROTON_LOG=1 %command%", "log in ~"],
 ];
 
-function presetFor(fileName) {
+function presetFor(fileName, windows) {
   const preset = PROGRAM_PRESETS.find((p) => p.match.test(fileName));
-  if (!preset) return GENERIC_OPTIONS;
+  if (!preset) return windows ? WINDOWS_OPTIONS : GENERIC_OPTIONS;
   if (preset.cli && preset.cli.test(fileName)) return [...preset.cliBefore, ...preset.cliAfter];
   return [...(preset.before || []), ...(preset.after || [])];
 }
 
-/** Splits a command line the way bash would for plain words, "quotes", 'quotes' and \ escapes. */
-function splitArgs(text) {
+/** Splits a command line the way bash would for plain words, "quotes", 'quotes' and \ escapes.
+ *  For a Windows program a backslash is part of the path, not an escape. */
+function splitArgs(text, windows = launcher.windows) {
   const args = [];
   let word = null;
   let quote = null;
@@ -1485,7 +1489,7 @@ function splitArgs(text) {
     const c = text[i];
     if (quote) {
       if (c === quote) quote = null;
-      else if (c === "\\" && quote === '"' && /["\\$`]/.test(text[i + 1] || "")) word += text[++i];
+      else if (!windows && c === "\\" && quote === '"' && /["\\$`]/.test(text[i + 1] || "")) word += text[++i];
       else word += c;
     } else if (/\s/.test(c)) {
       if (word !== null) args.push(word);
@@ -1493,7 +1497,7 @@ function splitArgs(text) {
     } else {
       if (word === null) word = "";
       if (c === '"' || c === "'") quote = c;
-      else if (c === "\\" && i + 1 < text.length) word += text[++i];
+      else if (!windows && c === "\\" && i + 1 < text.length) word += text[++i];
       else word += c;
     }
   }
@@ -1508,6 +1512,16 @@ function shQuote(text) {
 
 function argQuote(text) {
   return /^[\w@%+=:,./-]+$/.test(text) ? text : '"' + text.replace(/(["\\$`])/g, "\\$1") + '"';
+}
+
+/** The path a Windows program sees under Proton: Z: is the Linux root. */
+function windowsPath(path) {
+  return "Z:" + path.replace(/\//g, "\\");
+}
+
+/** Steam launch options: words with spaces in double quotes, the way Windows splits them. */
+function winQuote(text) {
+  return /[\s"]/.test(text) || !text ? '"' + text.replace(/"/g, '\\"') + '"' : text;
 }
 
 function absolutePath(drive, path) {
@@ -1547,6 +1561,10 @@ function renderLauncherPreview() {
     preview.textContent = L.launcherQuotes;
     return;
   }
+  if (launcher.windows) {
+    preview.textContent = `${L.launcherWindowsNote}\n\n"${launcher.program}" ${args.map(winQuote).join(" ")}`;
+    return;
+  }
   const dir = launcher.program.substring(0, launcher.program.lastIndexOf("/")) || "/";
   preview.textContent =
     "#!/bin/bash\n" +
@@ -1560,9 +1578,11 @@ function openLauncherDialog(path) {
   launcher.folder = parentPath(path);
   launcher.program = absolutePath(currentDrive, path);
   launcher.rel = path;
+  launcher.windows = launchKind(fileName) === "windows";
   launcher.browseDrive = currentDrive;
   launcher.browsePath = launcher.folder;
   const dialog = $(".dialog.launcher");
+  dialog.classList.toggle("windows", launcher.windows);
   $(".launcher-file", dialog).textContent = launcher.program;
   $("#launcher-args").value = "";
   const base = fileName.replace(/\.[^.]+$/, "");
@@ -1571,7 +1591,8 @@ function openLauncherDialog(path) {
   $("#launcher-steam").checked = true;
   $("#launcher-title").disabled = false;
   $(".launcher-browser").classList.add("hidden");
-  renderChips($(".launcher-chips", dialog), presetFor(fileName), $("#launcher-args"));
+  renderChips($(".launcher-chips", dialog), presetFor(fileName, launcher.windows), $("#launcher-args"));
+  $(".act-create-launcher").textContent = launcher.windows ? L.addToSteamButton : L.launcherCreate;
   renderLauncherPreview();
   Dialog.show("launcher");
   $("#launcher-args").focus();
@@ -1619,7 +1640,8 @@ async function browseLauncher(drive, path) {
     if (entry.type === "dir") add("📁 " + entry.name + "/", () => browseLauncher(drive, rel));
     else
       add("📄 " + entry.name, () => {
-        insertArg($("#launcher-args"), argQuote(absolutePath(drive, rel)));
+        const full = absolutePath(drive, rel);
+        insertArg($("#launcher-args"), launcher.windows ? winQuote(windowsPath(full)) : argQuote(full));
         // the game names the script better than the emulator, unless the user typed a name
         const game = entry.name.replace(/\.[^.]+$/, "");
         const file = game.replace(/["'$`\\]/g, "").trim() || game;
@@ -1639,6 +1661,7 @@ async function createLauncher(force = false, forceSteam = false) {
   }
   const name = $("#launcher-name").value.trim();
   const title = $("#launcher-title").value.trim();
+  if (launcher.windows) return addWindowsShortcut(title, args.map(winQuote).join(" "));
   const steam = $("#launcher-steam").checked;
   if (!name || (steam && !title)) {
     alert(L.emptyName);
@@ -1680,6 +1703,34 @@ async function createLauncher(force = false, forceSteam = false) {
     alert(written + "\n\n" + L.steamNoAnswer);
   } else {
     alert(written + "\n\n" + L.steamFailed(st.detail || st.code));
+  }
+}
+
+async function addWindowsShortcut(title, options, force = false) {
+  if (!title) {
+    alert(L.emptyName);
+    return;
+  }
+  const params = { drive: launcher.drive, path: launcher.rel, name: title, proton: "1", options };
+  if (force) params.force = "1";
+  Dialog.loading.show(L.steamAdding);
+  let result;
+  try {
+    result = await (await api("POST", "steam", params)).json();
+  } catch (error) {
+    fail(error);
+    return;
+  }
+  Dialog.loading.hide();
+  if (result.ok) {
+    Dialog.hide();
+    alert(L.steamAdded(result.name, result.tool));
+  } else if (result.code === "exists") {
+    if (confirm(L.steamExists)) addWindowsShortcut(title, options, true);
+  } else if (result.code === "no_answer" || result.code === "no_steam_client") {
+    alert(L.steamNoAnswer);
+  } else {
+    alert(L.steamFailed(result.detail || result.code));
   }
 }
 

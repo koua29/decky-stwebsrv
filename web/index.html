@@ -397,13 +397,16 @@
             <div class="launcher-browser-path"></div>
             <div class="launcher-browser-list"></div>
           </div>
-          <label for="launcher-name" class="oinput-label" data-i18n="launcherName">Script name:</label>
-          <input type="text" id="launcher-name" class="oinput-text-submit" autocomplete="off" />
+          <div class="linux-only">
+            <label for="launcher-name" class="oinput-label" data-i18n="launcherName">Script name:</label>
+            <input type="text" id="launcher-name" class="oinput-text-submit" autocomplete="off" />
+          </div>
           <pre class="launcher-preview"></pre>
-          <label class="check-row">
+          <label class="check-row linux-only">
             <input type="checkbox" id="launcher-steam" checked />
             <span data-i18n="launcherSteam">Also add the script to Steam, named:</span>
           </label>
+          <label for="launcher-title" class="oinput-label windows-only" data-i18n="steamName">Name in Steam:</label>
           <input type="text" id="launcher-title" class="oinput-text-submit" autocomplete="off" />
           <p class="steam-hint" data-i18n="launcherHint">Suggested options depend on the program's version: check its documentation if one is refused.</p>
         </div>

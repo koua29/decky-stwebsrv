@@ -603,6 +603,13 @@ svg > path {
   background: var(--color);
   color: var(--background);
 }
+.dialog.launcher .windows-only,
+.dialog.launcher.windows .linux-only {
+  display: none;
+}
+.dialog.launcher.windows .windows-only {
+  display: block;
+}
 .launcher-preview {
   font-size: 12px;
   white-space: pre-wrap;
