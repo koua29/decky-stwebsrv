@@ -100,7 +100,7 @@ const L = FR
       launcherTitle: "Lancer avec des arguments",
       launcherWindowsNote: "Programme Windows : Steam le lancera avec Proton et ces arguments (options de lancement du raccourci). Les chemins sont convertis en Z:\\…, le disque Linux vu par Proton.",
       launcherArgs: "Arguments :",
-      launcherPickFile: "📄 Fichier du jeu…",
+      launcherPickFile: "📄 Fichier (jeu, config)…",
       launcherName: "Nom du script :",
       launcherSteam: "Ajouter aussi le script à Steam, sous le nom :",
       launcherHint: "Les options proposées dépendent de la version du programme : vérifie sa documentation si l'une est refusée.",
@@ -217,7 +217,7 @@ const L = FR
       launcherTitle: "Launch with arguments",
       launcherWindowsNote: "Windows program: Steam starts it with Proton and these arguments (the shortcut's launch options). Paths are turned into Z:\\…, the Linux drive as Proton sees it.",
       launcherArgs: "Arguments:",
-      launcherPickFile: "📄 Game file…",
+      launcherPickFile: "📄 File (game, config)…",
       launcherName: "Script name:",
       launcherSteam: "Also add the script to Steam, named:",
       launcherHint: "Suggested options depend on the program's version: check its documentation if one is refused.",
@@ -1457,7 +1457,7 @@ $("#steam-appid").addEventListener("change", async (e) => {
 // program expects a game file; `before` = options that must come before it.
 const PROGRAM_PRESETS = [
   { match: /eden|yuzu|suyu|sudachi|citron|torzu/i, before: [["-f", "fullscreen"], ["-g", "game"]],
-    cli: /cli|cmd/i, cliBefore: [], cliAfter: [["--fullscreen", "fullscreen"]] },
+    cli: /cli|cmd/i, cliBefore: [["-c", "config file (sdl2-config.ini)"], ["-g", "game"]], cliAfter: [["--fullscreen", "fullscreen"]] },
   { match: /ryujinx/i, after: [["--fullscreen", "fullscreen"], ["--start-in-fullscreen", ""]] },
   { match: /dolphin/i, before: [["-b", "quit on exit"], ["-C Dolphin.Display.Fullscreen=True", "fullscreen"], ["-e", "game"]] },
   { match: /pcsx2/i, before: [["-batch", "quit on exit"], ["-fullscreen", "fullscreen"], ["-nogui", ""], ["--", "then game"]] },
@@ -1653,6 +1653,12 @@ async function browseLauncher(drive, path) {
         const full = absolutePath(drive, rel);
         insertArg($("#launcher-args"), launcher.windows ? winQuote(windowsPath(full)) : argQuote(full));
         // the game names the script better than the emulator, unless the user typed a name
+        // (a settings file names nothing)
+        if (/\.(ini|cfg|conf|json|xml|txt|toml|ya?ml)$/i.test(entry.name)) {
+          $(".launcher-browser").classList.add("hidden");
+          $("#launcher-args").focus();
+          return;
+        }
         const game = entry.name.replace(/\.[^.]+$/, "");
         const file = game.replace(/["'$`\\]/g, "").trim() || game;
         if ($("#launcher-name").value === launcher.defaultName) $("#launcher-name").value = launcher.defaultName = `${file}.sh`;
