@@ -79,6 +79,10 @@ LAUNCH_EXT = {
 }
 SHORTCUT_TIMEOUT = 20  # seconds the web request waits for Steam's answer
 
+# Launch scripts: a .sh that starts a Linux program with fixed arguments (beta).
+LAUNCHER_HEADER = "# Launch script created by STWebSRV"
+LAUNCHER_ARGS_LIMIT = 4000
+
 # steam_appid.txt tells a Steamworks game its App ID when Steam did not start it (beta).
 APPID_FILE = "steam_appid.txt"
 APPID_RE = re.compile(r"[1-9][0-9]{0,9}")
@@ -298,6 +302,13 @@ def _launch_kind(path):
     return None
 
 
+def _sh_quote(text):
+    """Quotes one word for bash (shlex.quote, which the frozen Python of Decky may lack)."""
+    if text and re.fullmatch(r"[\w@%+=:,./-]+", text):
+        return text
+    return "'" + text.replace("'", "'\"'\"'") + "'"
+
+
 def _makedirs_inside(root, directory):
     """os.makedirs, refusing to create anything through a link that leaves the drive."""
     existing = directory
@@ -381,6 +392,7 @@ def _list(drive_id, rel):
                 "size": 0 if is_dir else info.st_size,
                 "mtime": int(info.st_mtime),
                 "btime": _birthtime(entry.path, info),
+                "exec": not is_dir and bool(info.st_mode & stat.S_IXUSR),
             })
     entries.sort(key=lambda e: (e["type"] != "dir", e["name"].lower()))
     path = "/" + os.path.relpath(full, root).replace(os.sep, "/")
@@ -447,7 +459,7 @@ def _info():
             used, total = usage.used, usage.total
         except OSError:
             used = total = 0
-        drives.append({"id": d["id"], "label": d["label"], "used": _human(used), "total": _human(total)})
+        drives.append({"id": d["id"], "label": d["label"], "root": d["root"], "used": _human(used), "total": _human(total)})
     return {"version": CURRENT_VERSION, "hostname": socket.gethostname(),
             "drives": drives, "shortcuts": _shortcuts(), "launch_ext": LAUNCH_EXT}
 
@@ -994,6 +1006,56 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             "force": q.get("force") == "1",
         }
         self._json(self.server_ref.plugin.add_steam_shortcut(request))
+
+    def _api_post_launcher(self, q):
+        """Writes a .sh that runs a Linux program with fixed arguments, then adds it to Steam if asked."""
+        root, program = _resolve(q.get("drive", "home"), q.get("path"))
+        if not os.path.isfile(program):
+            raise HttpError(404, "Not a file")
+        if _launch_kind(program) == "windows":
+            raise HttpError(415, "A Windows program runs through Proton: use its launch options")
+        raw = q.get("args") or "[]"
+        try:
+            args = json.loads(raw) if len(raw) <= LAUNCHER_ARGS_LIMIT else None
+        except ValueError:
+            args = None
+        if not isinstance(args, list) or not all(isinstance(a, str) and "\x00" not in a and "\n" not in a
+                                                 for a in args):
+            raise HttpError(400, "Invalid arguments")
+        name = _valid_name(q.get("name") or os.path.splitext(os.path.basename(program))[0])
+        if not name.lower().endswith(".sh"):
+            name += ".sh"
+        _, folder = _resolve(q.get("drive", "home"), q.get("folder") or os.path.relpath(os.path.dirname(program), root))
+        if not os.path.isdir(folder):
+            raise HttpError(404, "Not a folder")
+        target = os.path.join(folder, name)
+        if os.path.lexists(target) and q.get("force") != "1":
+            self._json({"ok": False, "code": "exists", "path": target})
+            return
+        label = (q.get("title") or "").strip() or os.path.splitext(name)[0]
+        if q.get("steam") == "1" and (len(label) > 200 or "\x00" in label or '"' in target):
+            raise HttpError(400, "Steam cannot take a double quote in the path, or this name")
+        mode = os.stat(program).st_mode
+        if not mode & stat.S_IXUSR:  # the script runs the program directly
+            os.chmod(program, mode | stat.S_IXUSR)
+        command = " ".join(_sh_quote(part) for part in [program] + args)
+        script = (f"#!/bin/bash\n{LAUNCHER_HEADER}\n"
+                  f"cd {_sh_quote(os.path.dirname(program))} || exit 1\n"
+                  f'exec {command} "$@"\n')
+        tmp = target + PART_SUFFIX
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(script)
+        os.chmod(tmp, 0o755)
+        os.replace(tmp, target)
+        decky.logger.info("Launch script %s: %s", target, command)
+        result = {"ok": True, "code": "written", "path": target, "script": script}
+        if q.get("steam") == "1":
+            result["steam"] = self.server_ref.plugin.add_steam_shortcut({
+                "path": target, "name": label, "exe": f'"{target}"',
+                "start_dir": f'"{os.path.dirname(target)}"', "options": "",
+                "proton": False, "force": q.get("force_steam") == "1",
+            })
+        self._json(result)
 
     # ---- steam_appid.txt (beta)
 

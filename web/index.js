@@ -97,6 +97,20 @@ const L = FR
         "Steam n'a pas répondu. La console doit être en mode Jeu (pas en mode Bureau), avec Decky actif.",
       steamFailed: (detail) => `Steam n'a pas pu créer le raccourci${detail ? ` : ${detail}` : "."}`,
       nativeNote: "Programme Linux : il sera rendu exécutable si besoin.",
+      launcherTitle: "Créer un script de lancement (.sh)",
+      launcherArgs: "Arguments :",
+      launcherPickFile: "📄 Fichier du jeu…",
+      launcherName: "Nom du script :",
+      launcherSteam: "Ajouter aussi le script à Steam, sous le nom :",
+      launcherHint: "Les options proposées dépendent de la version du programme : vérifie sa documentation si l'une est refusée.",
+      launcherCreate: "Créer",
+      launcherCreating: "Création du script…",
+      launcherQuotes: "Guillemet non fermé dans les arguments.",
+      launcherExists: (name) => `« ${name} » existe déjà dans ce dossier. Le remplacer ?`,
+      launcherWritten: (path) => `Script créé : ${path}`,
+      launcherUp: "⬆ Dossier parent",
+      launcherDrives: "Disques",
+      launcherEmpty: "Dossier vide",
       appidButton: "Créer steam_appid.txt dans ce dossier (ID Steam du jeu)",
       appidLabel: "ID Steam du jeu, nom ou lien du Store :",
       appidInSteam: "Créer aussi steam_appid.txt à côté du programme",
@@ -199,6 +213,20 @@ const L = FR
       steamNoAnswer: "Steam did not answer. The console must be in Game Mode (not Desktop Mode), with Decky running.",
       steamFailed: (detail) => `Steam could not create the shortcut${detail ? `: ${detail}` : "."}`,
       nativeNote: "Linux program: it will be made executable if needed.",
+      launcherTitle: "Create a launch script (.sh)",
+      launcherArgs: "Arguments:",
+      launcherPickFile: "📄 Game file…",
+      launcherName: "Script name:",
+      launcherSteam: "Also add the script to Steam, named:",
+      launcherHint: "Suggested options depend on the program's version: check its documentation if one is refused.",
+      launcherCreate: "Create",
+      launcherCreating: "Creating the script…",
+      launcherQuotes: "Unclosed quote in the arguments.",
+      launcherExists: (name) => `"${name}" already exists in this folder. Replace it?`,
+      launcherWritten: (path) => `Script created: ${path}`,
+      launcherUp: "⬆ Parent folder",
+      launcherDrives: "Drives",
+      launcherEmpty: "Empty folder",
       appidButton: "Create steam_appid.txt in this folder (the game's Steam ID)",
       appidLabel: "Steam App ID, game name or Store link:",
       appidInSteam: "Also create steam_appid.txt next to the program",
@@ -585,7 +613,9 @@ function renderFileRows(data) {
     } else {
       name.classList.add("act-open-file");
       e.querySelector(".col-action").classList.add("type-file");
-      if (launchKind(entry.name)) e.querySelector(".col-action").classList.add("launchable");
+      const kind = launchKind(entry.name);
+      if (kind) e.querySelector(".col-action").classList.add("launchable");
+      if (kind === "native" || (entry.exec && kind !== "windows")) e.querySelector(".col-action").classList.add("scriptable");
     }
     tbody.appendChild(e);
   }
@@ -1341,6 +1371,7 @@ function openSteamDialog(path) {
   $("#steam-name").value = fileName.replace(/\.[^.]+$/, "");
   $("#steam-proton").checked = kind === "windows";
   $("#steam-options").value = "";
+  renderChips($(".steam-chips"), kind === "windows" ? WINDOWS_OPTIONS : [], $("#steam-options"));
   $("#steam-appid").checked = false;
   steamPicker.reset("");
   steamPicker.root.classList.add("hidden");
@@ -1405,6 +1436,261 @@ $("#steam-appid").addEventListener("change", async (e) => {
   }
   steamPicker.reset(APPID.test(existing) ? existing : $("#steam-name").value.trim());
   steamPicker.input.focus();
+});
+
+// ------------------------------------------------------------------ launch scripts (beta)
+
+// Options most used with each program, picked by its file name. `file` = the
+// program expects a game file; `before` = options that must come before it.
+const PROGRAM_PRESETS = [
+  { match: /eden|yuzu|suyu|sudachi|citron|torzu/i, before: [["-f", "fullscreen"], ["-g", "game"]],
+    cli: /cli|cmd/i, cliBefore: [], cliAfter: [["--fullscreen", "fullscreen"]] },
+  { match: /ryujinx/i, after: [["--fullscreen", "fullscreen"], ["--start-in-fullscreen", ""]] },
+  { match: /dolphin/i, before: [["-b", "quit on exit"], ["-C Dolphin.Display.Fullscreen=True", "fullscreen"], ["-e", "game"]] },
+  { match: /pcsx2/i, before: [["-batch", "quit on exit"], ["-fullscreen", "fullscreen"], ["-nogui", ""], ["--", "then game"]] },
+  { match: /duckstation/i, before: [["-batch", "quit on exit"], ["-fullscreen", "fullscreen"], ["--", "then game"]] },
+  { match: /rpcs3/i, before: [["--no-gui", "no window"], ["--fullscreen", "fullscreen"]] },
+  { match: /ppsspp/i, before: [["--fullscreen", "fullscreen"]] },
+  { match: /cemu/i, before: [["-f", "fullscreen"], ["-g", "game"]] },
+  { match: /retroarch/i, before: [["-f", "fullscreen"], ["-L", "core .so"]] },
+  { match: /xemu/i, before: [["-full-screen", "fullscreen"], ["-dvd_path", "game"]] },
+  { match: /azahar|citra|lime3ds/i, before: [["-f", "fullscreen"]] },
+  { match: /melonds/i, before: [["-f", "fullscreen"]] },
+  { match: /shadps4/i, before: [["-f true", "fullscreen"], ["-g", "game"]] },
+  { match: /vita3k/i, before: [["-F", "fullscreen"], ["-r", "title ID"]] },
+  { match: /mgba/i, before: [["-f", "fullscreen"]] },
+  { match: /flycast|redream|mednafen|xenia/i, before: [["-fullscreen", "fullscreen"]] },
+];
+const GENERIC_OPTIONS = [["--fullscreen", "fullscreen"], ["-fullscreen", "fullscreen"], ["-f", "fullscreen"], ["--windowed", ""]];
+// Steam launch options of a Windows program (run through Proton)
+const WINDOWS_OPTIONS = [
+  ["-windowed", ""], ["-fullscreen", ""], ["-dx11", ""], ["-dx12", ""], ["-vulkan", ""], ["-skipintro", ""],
+  ["-nolauncher", ""], ["gamemoderun %command%", ""], ["mangohud %command%", ""],
+  ["PROTON_USE_WINED3D=1 %command%", "old DirectX"], ["PROTON_LOG=1 %command%", "log in ~"],
+];
+
+function presetFor(fileName) {
+  const preset = PROGRAM_PRESETS.find((p) => p.match.test(fileName));
+  if (!preset) return GENERIC_OPTIONS;
+  if (preset.cli && preset.cli.test(fileName)) return [...preset.cliBefore, ...preset.cliAfter];
+  return [...(preset.before || []), ...(preset.after || [])];
+}
+
+/** Splits a command line the way bash would for plain words, "quotes", 'quotes' and \ escapes. */
+function splitArgs(text) {
+  const args = [];
+  let word = null;
+  let quote = null;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quote) {
+      if (c === quote) quote = null;
+      else if (c === "\\" && quote === '"' && /["\\$`]/.test(text[i + 1] || "")) word += text[++i];
+      else word += c;
+    } else if (/\s/.test(c)) {
+      if (word !== null) args.push(word);
+      word = null;
+    } else {
+      if (word === null) word = "";
+      if (c === '"' || c === "'") quote = c;
+      else if (c === "\\" && i + 1 < text.length) word += text[++i];
+      else word += c;
+    }
+  }
+  if (quote) return null;
+  if (word !== null) args.push(word);
+  return args;
+}
+
+function shQuote(text) {
+  return /^[\w@%+=:,./-]+$/.test(text) ? text : "'" + text.replace(/'/g, `'"'"'`) + "'";
+}
+
+function argQuote(text) {
+  return /^[\w@%+=:,./-]+$/.test(text) ? text : '"' + text.replace(/(["\\$`])/g, "\\$1") + '"';
+}
+
+function absolutePath(drive, path) {
+  const root = (drives.find((d) => d.id === drive) || {}).root || "";
+  return path === "/" ? root : root.replace(/\/$/, "") + path;
+}
+
+function insertArg(input, text) {
+  const value = input.value.replace(/\s+$/, "");
+  input.value = value ? value + " " + text : text;
+  input.dispatchEvent(new Event("input"));
+}
+
+function renderChips(box, options, input) {
+  box.querySelectorAll(".chip:not(.chip-file)").forEach((chip) => chip.remove());
+  for (const [flag, note] of options) {
+    const chip = document.createElement("button");
+    chip.className = "chip";
+    chip.type = "button";
+    chip.textContent = flag;
+    if (note) chip.title = note;
+    chip.addEventListener("click", (e) => {
+      e.preventDefault();
+      insertArg(input, flag);
+      input.focus();
+    });
+    box.appendChild(chip);
+  }
+}
+
+const launcher = { drive: "", program: "", folder: "", browseDrive: "", browsePath: "" };
+
+function renderLauncherPreview() {
+  const args = splitArgs($("#launcher-args").value);
+  const preview = $(".launcher-preview");
+  if (!args) {
+    preview.textContent = L.launcherQuotes;
+    return;
+  }
+  const dir = launcher.program.substring(0, launcher.program.lastIndexOf("/")) || "/";
+  preview.textContent =
+    "#!/bin/bash\n" +
+    `cd ${shQuote(dir)} || exit 1\n` +
+    `exec ${[launcher.program, ...args].map(shQuote).join(" ")} "$@"`;
+}
+
+function openLauncherDialog(path) {
+  const fileName = path.substring(path.lastIndexOf("/") + 1);
+  launcher.drive = currentDrive;
+  launcher.folder = parentPath(path);
+  launcher.program = absolutePath(currentDrive, path);
+  launcher.rel = path;
+  launcher.browseDrive = currentDrive;
+  launcher.browsePath = launcher.folder;
+  const dialog = $(".dialog.launcher");
+  $(".launcher-file", dialog).textContent = launcher.program;
+  $("#launcher-args").value = "";
+  const base = fileName.replace(/\.[^.]+$/, "");
+  $("#launcher-name").value = launcher.defaultName = `${base}-launch.sh`;
+  $("#launcher-title").value = launcher.defaultTitle = base;
+  $("#launcher-steam").checked = true;
+  $("#launcher-title").disabled = false;
+  $(".launcher-browser").classList.add("hidden");
+  renderChips($(".launcher-chips", dialog), presetFor(fileName), $("#launcher-args"));
+  renderLauncherPreview();
+  Dialog.show("launcher");
+  $("#launcher-args").focus();
+}
+
+async function browseLauncher(drive, path) {
+  const list = $(".launcher-browser-list");
+  const head = $(".launcher-browser-path");
+  list.innerHTML = "";
+  const add = (label, onClick) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.addEventListener("click", (e) => {
+      e.preventDefault();
+      onClick();
+    });
+    list.appendChild(b);
+  };
+  if (drive === null) {
+    head.textContent = L.launcherDrives;
+    for (const d of drives) add("💾 " + d.label, () => browseLauncher(d.id, "/"));
+    return;
+  }
+  let data;
+  try {
+    data = await (await api("GET", "list", { drive, path })).json();
+  } catch (error) {
+    fail(error);
+    return;
+  }
+  launcher.browseDrive = drive;
+  launcher.browsePath = data.path;
+  head.textContent = absolutePath(drive, data.path);
+  add(L.launcherUp, () => (data.path === "/" ? browseLauncher(null, "") : browseLauncher(drive, parentPath(data.path))));
+  const entries = sortEntries(data.entries);
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "launcher-browser-path";
+    empty.textContent = L.launcherEmpty;
+    list.appendChild(empty);
+  }
+  for (const entry of entries) {
+    const rel = joinPath(data.path, entry.name);
+    if (entry.type === "dir") add("📁 " + entry.name + "/", () => browseLauncher(drive, rel));
+    else
+      add("📄 " + entry.name, () => {
+        insertArg($("#launcher-args"), argQuote(absolutePath(drive, rel)));
+        // the game names the script better than the emulator, unless the user typed a name
+        const game = entry.name.replace(/\.[^.]+$/, "");
+        const file = game.replace(/["'$`\\]/g, "").trim() || game;
+        if ($("#launcher-name").value === launcher.defaultName) $("#launcher-name").value = launcher.defaultName = `${file}.sh`;
+        if ($("#launcher-title").value === launcher.defaultTitle) $("#launcher-title").value = launcher.defaultTitle = game;
+        $(".launcher-browser").classList.add("hidden");
+        $("#launcher-args").focus();
+      });
+  }
+}
+
+async function createLauncher(force = false, forceSteam = false) {
+  const args = splitArgs($("#launcher-args").value);
+  if (!args) {
+    alert(L.launcherQuotes);
+    return;
+  }
+  const name = $("#launcher-name").value.trim();
+  const title = $("#launcher-title").value.trim();
+  const steam = $("#launcher-steam").checked;
+  if (!name || (steam && !title)) {
+    alert(L.emptyName);
+    return;
+  }
+  const params = {
+    drive: launcher.drive,
+    path: launcher.rel,
+    folder: launcher.folder,
+    args: JSON.stringify(args),
+    name,
+    steam: steam ? "1" : "0",
+    title,
+  };
+  if (force) params.force = "1";
+  if (forceSteam) params.force_steam = "1";
+  Dialog.loading.show(steam ? L.steamAdding : L.launcherCreating);
+  let result;
+  try {
+    result = await (await api("POST", "launcher", params)).json();
+  } catch (error) {
+    fail(error);
+    return;
+  }
+  Dialog.loading.hide();
+  if (result.code === "exists") {
+    if (confirm(L.launcherExists(name.endsWith(".sh") ? name : name + ".sh"))) createLauncher(true, forceSteam);
+    return;
+  }
+  fetchFiles(currentDrive, currentPath);
+  const written = L.launcherWritten(result.path);
+  const st = result.steam;
+  if (!st || st.ok) {
+    Dialog.hide();
+    alert(st ? L.steamAdded(st.name, st.tool) + "\n\n" + written : written);
+  } else if (st.code === "exists") {
+    if (confirm(written + "\n\n" + L.steamExists)) createLauncher(true, true);
+  } else if (st.code === "no_answer" || st.code === "no_steam_client") {
+    alert(written + "\n\n" + L.steamNoAnswer);
+  } else {
+    alert(written + "\n\n" + L.steamFailed(st.detail || st.code));
+  }
+}
+
+$("#launcher-args").addEventListener("input", renderLauncherPreview);
+$("#launcher-steam").addEventListener("change", (e) => ($("#launcher-title").disabled = !e.target.checked));
+$(".act-create-launcher").addEventListener("click", () => createLauncher());
+$(".act-launcher-pick").addEventListener("click", (e) => {
+  e.preventDefault();
+  const box = $(".launcher-browser");
+  box.classList.toggle("hidden");
+  if (!box.classList.contains("hidden")) browseLauncher(launcher.browseDrive, launcher.browsePath);
 });
 
 // ------------------------------------------------------------------ steam_appid.txt (beta)
@@ -1649,6 +1935,13 @@ document.addEventListener("click", async (e) => {
     } else {
       Dialog.showOneInput(action, "", `${action}|${currentPath}`);
     }
+    return;
+  }
+
+  const actLauncher = e.target.closest(".act-launcher");
+  if (actLauncher) {
+    e.preventDefault();
+    openLauncherDialog(actLauncher.closest("tr").getAttribute("data-path"));
     return;
   }
 

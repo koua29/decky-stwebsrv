@@ -529,6 +529,88 @@ svg > path {
 .table .col-action.launchable .act-steam {
   display: inline-block;
 }
+.table .col-action .act-launcher {
+  display: none;
+}
+.table .col-action.scriptable .act-launcher {
+  display: inline-block;
+}
+.dialog.launcher {
+  max-width: 520px;
+}
+.dialog.launcher .dialog-body input[type="text"] {
+  margin-bottom: 8px;
+}
+#launcher-args {
+  font-family: monospace;
+}
+.launcher-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.launcher-chips:empty {
+  display: none;
+}
+.launcher-chips .chip {
+  border: 1px solid var(--color);
+  background: transparent;
+  color: var(--color);
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: monospace;
+}
+.launcher-chips .chip.chip-file {
+  font-family: inherit;
+  font-weight: bold;
+}
+.launcher-chips .chip:hover,
+.launcher-chips .chip:focus,
+.launcher-chips .chip.on {
+  background: var(--color);
+  color: var(--background);
+}
+.launcher-browser {
+  border: 1px solid var(--color);
+  margin-bottom: 10px;
+}
+.launcher-browser-path {
+  padding: 4px 8px;
+  word-break: break-all;
+  opacity: 0.8;
+  font-size: 12px;
+  border-bottom: 1px solid var(--light-color);
+}
+.launcher-browser-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+.launcher-browser-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  padding: 4px 8px;
+  cursor: pointer;
+  word-break: break-all;
+}
+.launcher-browser-list button:hover,
+.launcher-browser-list button:focus {
+  background: var(--color);
+  color: var(--background);
+}
+.launcher-preview {
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--light-color);
+  padding: 6px 8px;
+  margin: 0 0 10px;
+}
 .dialog.steam {
   max-width: 440px;
 }

@@ -224,6 +224,18 @@
                   fill="#02de02"
                 ></path>
               </svg></button>
+            <button class="icon-action act-launcher" data-i18n-title="launcherTitle"><svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#02de02"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="4 17 10 11 4 5"></polyline>
+                <line x1="12" y1="19" x2="20" y2="19"></line>
+              </svg></button>
             <a class="icon-action act-download" data-i18n-title="download"><svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
@@ -352,6 +364,7 @@
           </label>
           <label for="steam-options" class="oinput-label" data-i18n="launchOptions">Launch options (optional):</label>
           <input type="text" id="steam-options" class="oinput-text-submit" autocomplete="off" />
+          <div class="launcher-chips steam-chips"></div>
           <label class="check-row">
             <input type="checkbox" id="steam-appid" />
             <span data-i18n="appidInSteam">Also create steam_appid.txt next to the program</span>
@@ -366,6 +379,36 @@
         </div>
         <div class="dialog-footer">
           <button class="btn-action btn-default act-add-steam" data-i18n="addToSteamButton">Add to Steam</button>
+          <button class="btn-action act-dialog-close act-escape" data-i18n="close">Close</button>
+        </div>
+      </div>
+      <div class="dialog launcher hidden">
+        <div class="dialog-head">
+          <span data-i18n="launcherTitle">Create a launch script</span> <span class="beta-tag" data-i18n="betaTag">beta</span>
+        </div>
+        <div class="dialog-body">
+          <p class="steam-file launcher-file"></p>
+          <label for="launcher-args" class="oinput-label" data-i18n="launcherArgs">Arguments:</label>
+          <input type="text" id="launcher-args" class="oinput-text-submit" autocomplete="off" spellcheck="false" />
+          <div class="launcher-chips">
+            <button class="chip chip-file act-launcher-pick" data-i18n="launcherPickFile">📄 Game file…</button>
+          </div>
+          <div class="launcher-browser hidden">
+            <div class="launcher-browser-path"></div>
+            <div class="launcher-browser-list"></div>
+          </div>
+          <label for="launcher-name" class="oinput-label" data-i18n="launcherName">Script name:</label>
+          <input type="text" id="launcher-name" class="oinput-text-submit" autocomplete="off" />
+          <pre class="launcher-preview"></pre>
+          <label class="check-row">
+            <input type="checkbox" id="launcher-steam" checked />
+            <span data-i18n="launcherSteam">Also add the script to Steam, named:</span>
+          </label>
+          <input type="text" id="launcher-title" class="oinput-text-submit" autocomplete="off" />
+          <p class="steam-hint" data-i18n="launcherHint">Suggested options depend on the program's version: check its documentation if one is refused.</p>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn-action btn-default act-create-launcher" data-i18n="launcherCreate">Create</button>
           <button class="btn-action act-dialog-close act-escape" data-i18n="close">Close</button>
         </div>
       </div>
